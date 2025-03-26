@@ -1,0 +1,607 @@
+# Load necessary libraries 
+library(dplyr)
+library(ggplot2)
+library(ggstar)
+library(tidyr)
+library(ggimage)
+library(maps)
+library(sf) #Needed for loading maps (st_read)
+library(stringr)
+
+getwd()
+setwd("C:/Users/chris/Desktop/DTU/R/ORIG")
+source("C:/Users/chris/Desktop/DTU/R/ORIG/myfunctions.R")
+
+################################################################
+####################### LOAD IN THE DATA #######################
+################################################################
+
+# Step 1: Load the two CSV files
+vessel_data <- read.csv("DATA/TBS_vrd_vgt_edit.csv", na.strings = c("", "NA")) %>%
+  filter_all(all_vars(!is.na(.))) %>%  # Remove rows with NA
+  filter_all(all_vars(trimws(.) != "")) %>%  # Remove rows with empty strings or spaces
+  filter_all(all_vars(trimws(.) != ".")) %>%  # Remove rows with cells containing "     ."
+  filter(year >= 2010 & year <= 2024)  # Apply the year filter
+
+key_data <- read.csv("DATA/square_to_sandeel_areas_WKSAND16.csv", na.strings = c("", "NA")) %>%
+  filter_all(all_vars(!is.na(.))) %>%  # Remove rows with NA
+  filter_all(all_vars(trimws(.) != "")) %>%  # Remove rows with empty strings or spaces
+  filter_all(all_vars(trimws(.) != "."))  # Remove rows with cells containing "     ."
+
+# Step 2: Merge the two datasets by matching the 'square' column
+merged_data <- vessel_data %>%
+  left_join(key_data %>% select(square, area), by = "square") %>%
+  filter_all(all_vars(!is.na(.))) %>%  # Remove rows with NA
+  filter_all(all_vars(trimws(.) != ""))  # Remove rows with empty strings or spaces
+
+################################################################
+############### FILTER, RENAME AND ADD ICES REC'S ##############
+################################################################
+
+# Step 1: Filter for years 2010 to 2023, and remove rows with missing values (NA)
+# Also, filter to only include areas 1r, 2r, and 4
+
+vessel_data <- merged_data %>%
+  rename(Year = year, VLength = oal, Square = square, GearType = redskb) %>%
+  filter(area %in% c("1r")) %>%
+  filter_all(all_vars(str_trim(.) != ".")) %>%   # Remove rows where any column has the value "."
+  na.omit()  # Remove rows with NA values
+
+# Step 2: Use the ices.rect function to convert squares to lat/lon coordinates
+coordinates <- ices.rect(vessel_data$Square)
+
+# Step 3: Add the lat/lon coordinates to the filtered_data data frame
+vessel_data <- bind_cols(vessel_data, coordinates)
+
+################################################################
+###################### ADD TAC'S FOR FUN #######################
+################################################################
+
+#ADD TAC VALUES TO DATA
+vessel_data <- vessel_data %>%
+  mutate(TAC = case_when(
+    Year == 2010 & area == "1r" ~ 377000,
+    Year == 2010 & area == "2r" ~ 377000,
+    Year == 2010 & area == "4" ~ 377000,
+    Year == 2011 & area == "1r" ~ 320000,
+    Year == 2011 & area == "2r" ~ 34000,
+    Year == 2011 & area == "4" ~ 10000,
+    Year == 2012 & area == "1r" ~ 23000,
+    Year == 2012 & area == "2r" ~ 5000,
+    Year == 2012 & area == "4" ~ 5000,
+    Year == 2013 & area == "1r" ~ 225000,
+    Year == 2013 & area == "2r" ~ 18000,
+    Year == 2013 & area == "4" ~ 4000,
+    Year == 2014 & area == "1r" ~ 57000,
+    Year == 2014 & area == "2r" ~ 5000,
+    Year == 2014 & area == "4" ~ 5000,
+    Year == 2015 & area == "1r" ~ 133000,
+    Year == 2015 & area == "2r" ~ 29000,
+    Year == 2015 & area == "4" ~ 5000,
+    Year == 2016 & area == "1r" ~ 5000, #This is 13000 on TAC column in advice
+    Year == 2016 & area == "2r" ~ 5000,
+    Year == 2016 & area == "4" ~ 6000,
+    Year == 2017 & area == "1r" ~ 255956,
+    Year == 2017 & area == "2r" ~ 175941,
+    Year == 2017 & area == "4" ~ 54043,
+    Year == 2018 & area == "1r" ~ 134461,
+    Year == 2018 & area == "2r" ~ 5000,
+    Year == 2018 & area == "4" ~ 59345,
+    Year == 2019 & area == "1r" ~ 91916,
+    Year == 2019 & area == "2r" ~ 5000,
+    Year == 2019 & area == "4" ~ 5000,
+    Year == 2020 & area == "1r" ~ 113987,
+    Year == 2020 & area == "2r" ~ 62658,
+    Year == 2020 & area == "4" ~ 39611,
+    Year == 2021 & area == "1r" ~ 5351,
+    Year == 2021 & area == "2r" ~ 5000,
+    Year == 2021 & area == "4" ~ 68989,
+    Year == 2022 & area == "1r" ~ 5000,
+    Year == 2022 & area == "2r" ~ 71859,
+    Year == 2022 & area == "4" ~ 5000,
+    Year == 2023 & area == "1r" ~ 116815,
+    Year == 2023 & area == "2r" ~ 40997,
+    Year == 2023 & area == "4" ~ 5000,
+    Year == 2024 & area == "1r" ~ 132315,
+    Year == 2024 & area == "2r" ~ 35925,
+    Year == 2024 & area == "4" ~ 5000,
+    TRUE ~ NA_real_  # Default case if none match
+  ))
+
+# After calculating TAC values, add a new column for TAC == 5000
+vessel_data <- vessel_data %>%
+  mutate(TAC_marker = ifelse(TAC == 5000, TRUE, FALSE))
+
+# Step 7: Calculate the center of gravity per year and per area
+cog_per_year_area_vgt <- vessel_data %>%
+  group_by(Year, area) %>%
+  summarize(
+    lon_cog = sum(lon * vgt) / sum(vgt),
+    lat_cog = sum(lat * vgt) / sum(vgt)
+  )
+
+# Step 7: Calculate the center of gravity per year and per area
+cog_per_year_area_vrd <- vessel_data %>%
+  group_by(Year, area) %>%
+  summarize(
+    lon_cog = sum(lon * vrd) / sum(vrd),
+    lat_cog = sum(lat * vrd) / sum(vrd)
+  )
+
+###########################################################
+############## READ IN F AREA MAPS (1R, 2R, 4) ############
+###########################################################
+
+# Read the shapefile and filter for rows and columns covering labels 1r, 2r, and 4
+ices_rec <- st_read('DATA/SHAPEFILES/ICES_REC/ICES_Statistical_Rectangles_Eco.shp', 
+                    options = "ENCODING=UTF-8") %>%
+  mutate(group = case_when(
+    ICESNAME %in% c('36E9','37E9','34F0','35F0','36F0','37F0','38F0','39F0','40F0','31F1','32F1','33F1','34F1','35F1','36F1','37F1','38F1','39F1','40F1','31F2','32F2','33F2','34F2','35F2','36F2','37F2','38F2','39F2','40F2','31F3','32F3','33F3','34F3','35F3','36F3','37F3','38F3','39F3','40F3','32F4','33F4','34F4','35F4','36F4','37F4','38F4','39F4','40F4','41F4','34F5','35F5','36F5','37F5','38F5','39F5','40F5','41F5','35F6','36F6','37F6') ~ "1r",  # Light Cyan Group
+    ICESNAME %in% c('38F6','39F6','40F6','41F6','42F6','35F7','36F7','37F7','38F7','39F7','40F7','41F7','42F7','43F7','35F8','36F8','37F8','38F8','39F8','40F8','41F8','42F8','43F8','42F9','43F9','44F9','44G0','45G0','45G1','46G1') ~ "2r",  # Light Yellow Group
+    ICESNAME %in% c('40E6','41E6','44E6','45E6','46E6','40E7','41E7','42E7','43E7','44E7','45E7','46E7','38E8','39E8','40E8','41E8','42E8','43E8','44E8','45E8','46E8','38E9','39E9','40E9','41E9','42E9','43E9','44E9','45E9','46E9','41F0','42F0','43F0','44F0','45F0','46F0') ~ "4",   # Light Pink Group
+    TRUE ~ NA_character_  # Assign NA to rows outside these groups
+  )) %>%
+  filter(!is.na(group))
+
+###########################################################
+#################### READ IN SAND BANKS ###################
+###########################################################
+
+# Step 1: Load the BANKS RData file
+load("DATA/pol.RData")
+pol_df <- data.frame()
+for (p in 1:length(pol)) {
+  print(pol[p])
+  Bank_pols <-  cbind(pol[[p]], names(pol)[p])
+  pol_df <- rbind(pol_df, Bank_pols) 
+}
+names(pol_df)[3] <- c("BankID")
+
+###########################################################
+################### READ IN DOGGER BANK ###################
+###########################################################
+
+dogger <- st_read('DATA/SHAPEFILES/DOGGER 2019/Natura2000_end2019_shp/Natura2000_end2019_epsg3035.shp', ) %>% 
+  filter(SITECODE %in% c('DE1003301', 'UK0030352', 'NL2008001'))
+
+###########################################################
+################### READ IN ICES SQAURES ##################
+###########################################################
+
+ices <- (st_read('DATA/SHAPEFILES/ICES_AREAS/ICES_Areas_20160601_cut_dense_3857.shp', options = "ENCODING=UTF-8", ) %>%
+           filter(SubArea %in% c('4'), Division %in% c('a','b','c')))
+
+###########################################################
+###################### READ IN EEZ'S ######################
+###########################################################
+
+eez <- st_read('DATA/SHAPEFILES/EEZ/EEZ_Land_v3_202030.shp', ) %>%
+  filter(UNION %in% c('Denmark','Germany','Netherlands','Sweden','United Kingdom', 'Norway', 'France', 'Belgium', 'Jersey', 'Guernsey'))
+
+###########################################################
+################ READ IN COUNTRY BOUNDARIES ###############
+###########################################################
+
+country_boarders <- st_read('DATA/SHAPEFILES/EU COUNTRIES/Europe_SWAsia.shp', ) %>% 
+  filter(NAME %in% c('DENMARK', 'GERMANY', 'NETHERLANDS', 'SWEDEN', 'UNITED KINGDOM', 'NORWAY', 'FRANCE', 'BELGIUM', 'JERSEY (UK)', 'GUERNSEY (UK)'))
+
+###########################################################
+############### FILTER OUT CRAP I DON'T NEED ##############
+###########################################################
+
+dogger <- dogger[c(2,7)]
+ices <- ices[c(4,5, 11)]
+country_boarders <- country_boarders[c(1,8)]
+eez <- eez[c(1,31)]
+
+sf_use_s2(FALSE)
+
+###########################################################
+################## MAKE GEODETIC THE SAME #################
+###########################################################
+
+ices <- st_transform(ices, crs = 4326)
+eez <- st_transform(eez, crs = 4326)
+country_boarders <- st_transform(country_boarders, crs = 4326)
+ices_rec <- st_transform(ices_rec, crs = 4326)
+
+###########################################################
+################# CROP MAP FOR LOAD SPEED #################
+###########################################################
+
+cropped_ices <- st_crop(ices, xmin = -3, xmax = 11, ymin = 51, ymax = 59)
+cropped_eez <- st_crop(eez, xmin = -3, xmax = 11, ymin = 51, ymax = 59)
+cropped_country_boarders <- st_crop(country_boarders, xmin = -3, xmax = 11, ymin = 51, ymax = 59)
+cropped_ices_rec <- st_crop(ices_rec, xmin = -3, xmax = 11, ymin = 51, ymax = 59)
+pol_df_cropped <- pol_df %>% filter(x >= -3 & x <= 11, y >= 51 & y <= 59)
+vessel_data_cropped <- vessel_data %>% filter(lon >= -3 & lon <= 11 & lat >= 51 & lat <= 59)
+
+###############################################
+################## MAPS END ###################
+###############################################
+
+
+############################################/////////////////##################################ggplot(cog_per_year_area, aes(x = Year)) +
+
+setwd("C:/Users/chris/Desktop/DTU/R/ORIG/PLOTS/VGT")
+
+labels_df <- data.frame(
+  area = c("1r", "2r", "4"),
+  x = c(3.5, 7.5, -0.5),  # Longitude coordinates for each label
+  y = c(54, 56, 58)  # Latitude coordinates for each label
+)
+
+library(ggplot2)
+library(sf)
+library(dplyr)
+
+############################# VGT ###############################
+
+ggplot() +
+  # Plot ICES AREAS, EEZ, and country borders
+  geom_sf(data = cropped_ices_rec, aes(fill = group), color = "#000000", size = 0.5, alpha = 0.8) +
+  scale_fill_manual(values = c(
+    "1r" = "#c6e9e3", # Light cyan
+    "2r" = "#ffffd9", # Light yellow
+    "4"  = "#febfb8"  # Light pink
+  )) +
+  labs(fill = "Areas") +
+  theme(legend.position = "right") +
+  
+  # Plot the sand banks without adding to legend
+  geom_polygon(data = pol_df_cropped, aes(x, y, group = BankID), fill = "#c2bdb9", alpha = 0.6, show.legend = FALSE) +
+  
+  # Plot EEZ, country borders, and Dogger Bank without adding to legend
+  geom_sf(data = cropped_eez, size = 0.5, fill = NA, show.legend = FALSE) +
+  geom_sf(data = cropped_country_boarders, fill = "#219175", show.legend = FALSE) +
+  geom_sf(data = dogger, fill = "#c2bdb9", show.legend = FALSE) +
+  
+  # Plot the CoG points and label them with years
+  geom_point(data = cog_per_year_area_vgt, aes(x = lon_cog, y = lat_cog, color = area), size = 3) +
+  geom_text(data = cog_per_year_area_vgt, aes(x = lon_cog, y = lat_cog, label = Year, color = area), vjust = -1, size = 3, show.legend = FALSE) +
+  
+  # Manual color scale for areas
+  scale_color_manual(values = c("1r" = "#35465A", "2r" = "#435B20", "4" = "#CC3300"), name = "Area") +
+  
+  # Add the labels for the areas
+  geom_text(data = labels_df, aes(x = x, y = y, label = area), size = 5, color = "#000000", show.legend = FALSE) +  # Adjust size and color as needed
+  
+  # Labels
+  labs(title = "Movement of Center of Gravity Over Time - VGT",
+       subtitle = "Labeled by Year",
+       x = "Longitude",
+       y = "Latitude") 
+
+   #facet_wrap(~Year)  # Comment this out if you don't want facets
+
+# Save the plot
+ggsave("CoG_VGT.png", dpi = 300, width = 10, height = 8)
+
+############################# VRD ###############################
+
+# Plot the maps and CoG data over time
+ggplot() +
+  # Plot ICES AREAS, EEZ, and country borders
+  geom_sf(data = cropped_ices_rec, aes(fill = group), color = "#000000", size = 0.5, alpha = 0.8) +
+  scale_fill_manual(values = c(
+    "1r" = "#c6e9e3", # Light cyan
+    "2r" = "#ffffd9", # Light yellow
+    "4"  = "#febfb8"  # Light pink
+  )) +
+  labs(fill = "Areas") +
+  theme(legend.position = "right") +
+  # Plot the sand banks
+  geom_polygon(data = pol_df_cropped, aes(x, y, group = BankID), fill = "#c2bdb9", alpha = 0.6, show.legend = FALSE) +
+  # Plot EEZ, country borders and Dogger Bank
+  geom_sf(data = cropped_eez, size = 3, fill = "NA", show.legend = FALSE) +
+  geom_sf(data = cropped_country_boarders, fill = "#219175", show.legend = FALSE) +
+  geom_sf(data = dogger, fill = "#c2bdb9", show.legend = FALSE) +
+  
+  # Plot the CoG points and label them with years
+  geom_point(data = cog_per_year_area_vrd, aes(x = lon_cog, y = lat_cog, color = area), size = 3) +
+  geom_text(data = cog_per_year_area_vrd, aes(x = lon_cog, y = lat_cog, label = Year, color = area), vjust = -1, size = 3, show.legend = FALSE) +
+  
+  # Manual color scale for areas
+  scale_color_manual(values = c("1r" = "#35465A", "2r" = "#435B20", "4" = "#CC3300"), name = "Area") +
+  
+  # Add the labels for the areas
+  geom_text(data = labels_df, aes(x = x, y = y, label = area), size = 5, color = "#000000", show.legend = FALSE) +  # Adjust size and color as needed
+  
+  # Labels
+  labs(title = "Movement of Center of Gravity Over Time - VRD",
+       subtitle = "Labeled by Year",
+       x = "Longitude",
+       y = "Latitude") +
+
+  #facet_wrap(~Year)  # Comment this out if you don't want facets
+
+# Save the facet plot
+ggsave("CoG_VRD.png", dpi = 300, width = 10, height = 8)
+
+  
+##################################### FACETS ###########################################  
+
+############################# VGT ###############################
+
+ggplot() +
+  # Plot ICES AREAS, EEZ, and country borders
+  geom_sf(data = cropped_ices_rec, aes(fill = group), color = "#000000", size = 0.5, alpha = 0.8) +
+  scale_fill_manual(values = c(
+    "1r" = "#c6e9e3", # Light cyan
+    "2r" = "#ffffd9", # Light yellow
+    "4"  = "#febfb8"  # Light pink
+  )) +
+  labs(fill = "Areas") +
+  theme(legend.position = "right") +
+  
+  # Plot the sand banks without adding to legend
+  geom_polygon(data = pol_df_cropped, aes(x, y, group = BankID), fill = "#c2bdb9", alpha = 0.6, show.legend = FALSE) +
+  
+  # Plot EEZ, country borders, and Dogger Bank without adding to legend
+  geom_sf(data = cropped_eez, size = 0.5, fill = NA, show.legend = FALSE) +
+  geom_sf(data = cropped_country_boarders, fill = "#219175", show.legend = FALSE) +
+  geom_sf(data = dogger, fill = "#c2bdb9", show.legend = FALSE) +
+  
+  # Plot the CoG points and label them with years
+  geom_point(data = cog_per_year_area_vgt, aes(x = lon_cog, y = lat_cog, color = area), size = 3) +
+  geom_text(data = cog_per_year_area_vgt, aes(x = lon_cog, y = lat_cog, label = Year, color = area), vjust = -1, size = 3, show.legend = FALSE) +
+  
+  # Manual color scale for areas
+  scale_color_manual(values = c("1r" = "#35465A", "2r" = "#435B20", "4" = "#CC3300"), name = "Area") +
+  
+  # Add the labels for the areas
+  geom_text(data = labels_df, aes(x = x, y = y, label = area), size = 2.5, color = "#000000", show.legend = FALSE) +  # Adjust size and color as needed
+  
+  # Labels
+  labs(title = "Movement of Center of Gravity Over Time - VGT",
+       subtitle = "Labeled by Year",
+       x = "Longitude",
+       y = "Latitude") +
+  
+  facet_wrap(~Year)  # Comment this out if you don't want facets
+
+# Save the plot
+ggsave("CoG_VGT_FACET.png", dpi = 300, width = 10, height = 8)
+
+############################# VRD ###############################
+
+# Plot the maps and CoG data over time
+ggplot() +
+  # Plot ICES AREAS, EEZ, and country borders
+  geom_sf(data = cropped_ices_rec, aes(fill = group), color = "#000000", size = 0.5, alpha = 0.8) +
+  scale_fill_manual(values = c(
+    "1r" = "#c6e9e3", # Light cyan
+    "2r" = "#ffffd9", # Light yellow
+    "4"  = "#febfb8"  # Light pink
+  )) +
+  labs(fill = "Areas") +
+  theme(legend.position = "right") +
+  # Plot the sand banks
+  geom_polygon(data = pol_df_cropped, aes(x, y, group = BankID), fill = "#c2bdb9", alpha = 0.6, show.legend = FALSE) +
+  # Plot EEZ, country borders and Dogger Bank
+  geom_sf(data = cropped_eez, size = 3, fill = "NA", show.legend = FALSE) +
+  geom_sf(data = cropped_country_boarders, fill = "#219175", show.legend = FALSE) +
+  geom_sf(data = dogger, fill = "#c2bdb9", show.legend = FALSE) +
+  
+  # Plot the CoG points and label them with years
+  geom_point(data = cog_per_year_area_vrd, aes(x = lon_cog, y = lat_cog, color = area), size = 3) +
+  geom_text(data = cog_per_year_area_vrd, aes(x = lon_cog, y = lat_cog, label = Year, color = area), vjust = -1, size = 3, show.legend = FALSE) +
+  
+  # Manual color scale for areas
+  scale_color_manual(values = c("1r" = "#35465A", "2r" = "#435B20", "4" = "#CC3300"), name = "Area") +
+  
+  # Add the labels for the areas
+  geom_text(data = labels_df, aes(x = x, y = y, label = area), size = 2.5, color = "#000000", show.legend = FALSE) +  # Adjust size and color as needed
+  
+  # Labels
+  labs(title = "Movement of Center of Gravity Over Time - VRD",
+       subtitle = "Labeled by Year",
+       x = "Longitude",
+       y = "Latitude") +
+  
+  facet_wrap(~Year)  # Comment this out if you don't want facets
+
+# Save the facet plot
+ggsave("CoG_VRD_FACET.png", dpi = 300, width = 10, height = 8)
+
+######################################################################################  
+########################### NEEDED FOR COMPARING WITH TOTTON #########################
+######################################################################################
+
+setwd("C:/Users/chris/Desktop/DTU/R/ORIG/PLOTS/VGT-VGD-TOTTON")
+
+# Step 1: Load the two CSV files
+#key_data <- read.csv("DATA/square_to_sandeel_areas_WKSAND16.csv")
+new_data <- read.csv("DATA/Total_catch_per_square_2022.csv")
+
+# Step 2: Merge the two datasets by matching the 'Square' column from the new data to the 'square' column from the key data
+merged_data_totton <- new_data %>%
+  left_join(key_data, by = c("Square" = "square"))
+
+# Step 3: Filter for years 2010 to 2023, and remove rows with missing values (NA)
+# Also, filter to only include areas 1r, 2r, and 4
+filtered_data_totton <- merged_data_totton %>%
+  filter(Year >= 2010 & Year <= 2023, area %in% c("1r", "2r", "4")) %>%
+  na.omit()
+
+# Step 4: Use the ices.rect function to convert squares to lat/lon coordinates
+coordinates_totton <- ices.rect(filtered_data_totton$Square)
+
+# Step 5: Add the lat/lon coordinates to the filtered_data data frame
+filtered_data_totton <- cbind(filtered_data_totton, coordinates_totton)
+
+# Step 6: Calculate the center of gravity per year and per area
+cog_per_year_area_totton <- filtered_data_totton %>%
+  group_by(Year, area) %>%
+  summarize(
+    lon_cog = sum(lon * totton) / sum(totton),
+    lat_cog = sum(lat * totton) / sum(totton)
+  )
+
+######################################################################################
+
+ # LAT FUNCTION OF TIME 
+
+setwd("C:/Users/chris/Desktop/DTU/R/ORIG/PLOTS/VGT-VGD-TOTTON")
+
+p <- ggplot() +
+  # Plot the CoG points (Latitude as a function of Time)
+  geom_line(data = cog_per_year_area_vgt, aes(x = Year, y = lat_cog, color = area), size = 2) +
+  geom_text(data = cog_per_year_area_vgt, aes(x = Year, y = lat_cog, label = Year, color = area), vjust = -1, size = 3, show.legend = FALSE) +
+  
+  # Labels
+  labs(title = "Latitude as a Function of Time - VGT",
+       subtitle = "Labeled by Year",
+       x = "Year",
+       y = "Latitude")
+
+# Save the plot
+ggsave("CoG_VGT_Latitude_Time.png", plot = p, dpi = 300, width = 10, height = 8)
+
+p <- ggplot() +
+  # Plot the CoG points (Latitude as a function of Time)
+  geom_line(data = cog_per_year_area_vrd, aes(x = Year, y = lat_cog, color = area), size = 2) +
+  geom_text(data = cog_per_year_area_vrd, aes(x = Year, y = lat_cog, label = Year, color = area), vjust = -1, size = 3, show.legend = FALSE) +
+  
+  # Labels
+  labs(title = "Latitude as a Function of Time - VGT",
+       subtitle = "Labeled by Year",
+       x = "Year",
+       y = "Latitude")
+
+# Save the plot
+ggsave("CoG_VRD_Latitude_Time.png", plot = p, dpi = 300, width = 10, height = 8)
+
+########################TOTTON#######################
+
+p <- ggplot() +
+  # Plot the CoG points (Latitude as a function of Time)
+  geom_line(data = cog_per_year_area_totton, aes(x = Year, y = lat_cog, color = area), size = 2) +
+  geom_text(data = cog_per_year_area_totton, aes(x = Year, y = lat_cog, label = Year, color = area), vjust = -1, size = 3, show.legend = FALSE) +
+  
+  # Labels
+  labs(title = "Latitude as a Function of Time - TOTTON",
+       subtitle = "Labeled by Year",
+       x = "Year",
+       y = "Latitude")
+
+# Save the plot
+ggsave("CoG_TOTTON_Latitude_Time.png", plot = p, dpi = 300, width = 10, height = 8)
+
+############################ ALL ##########################
+
+# Step 1: Add 'Dataset' column to each dataset to distinguish VGT, VRD, and TOTTON
+cog_per_year_area_vgt_up <- cog_per_year_area_vgt %>%
+  mutate(Dataset = "VGT")
+
+cog_per_year_area_vrd_up <- cog_per_year_area_vrd %>%
+  mutate(Dataset = "VRD")
+
+cog_per_year_area_totton_up <- cog_per_year_area_totton %>%
+  mutate(Dataset = "TOTTON")
+
+# Step 2: Combine the datasets into one data frame
+combined_cog_data <- bind_rows(cog_per_year_area_vgt_up, cog_per_year_area_vrd_up, cog_per_year_area_totton_up)
+
+# Define font sizes
+base_size <- 16
+
+##################################### FOR VGT ONLY LONGITUDE  - USE combined_cog_data FOR ALL #########################################
+
+setwd("C:/Users/chris/Desktop/DTU/R/ORIG/PLOTS/VGT-VGD-TOTTON")
+# Step 3: Plot the data with 3 geom_lines (one for each Dataset), with areas distinguished by color
+p <- ggplot(cog_per_year_area_vgt, aes(x = Year, y = lon_cog, fill = area)) +
+  
+  # Plot the lines for each dataset and area
+  geom_line(linewidth = 1.5, color = "#000000", show.legend = TRUE) +
+  
+  # Add text labels for years (optional, not in legend)
+  geom_text(aes(label = Year), color = "#000000", vjust = -1, size = 3, show.legend = FALSE) +
+  
+  # Manual color scale for areas (if needed)
+  #scale_color_manual(values = c("1r" = "#b8e3e9", "2r" = "#ffce1b", "4" = "#ff746c")) +
+  scale_y_continuous(breaks = seq(-2, 10, by = 0.5)) + # Shows every 2 years from 2010 to 2024
+  scale_x_continuous(breaks = seq(2010, 2024)) +
+  
+  # Labels for the plot
+  labs(title = "Longitude as a Function of Time - Area 1r",
+       x = "Year",
+       y = "Longitude",
+       fill = "Area",
+       linetype = "Dataset") +
+  theme(
+    plot.title = element_text(size = 7, face = "bold"),
+    plot.background = element_rect(fill = "white", colour = "white"),
+    axis.title = element_text(size = 7, face = "bold"),
+    axis.text = element_text(size = 6, face = "bold", angle = 45, hjust = 1),
+    panel.background = element_rect(fill = "white", colour = "white"),
+    panel.grid.major = element_line(color = "grey80", linewidth = 0.5, linetype = "solid"),
+    panel.grid.minor = element_line(color = "grey80", linewidth = 0.5, linetype = "solid"),
+    strip.background = element_rect(fill = "white", color = NA),
+    strip.text = element_text(color = "black"),
+    plot.margin = margin(10, 0, 10, 0),
+  # Legend positioning
+    legend.position = "bottom",## <- here
+    legend.direction = "horizontal",   # Titles and attributes stay in a single row
+    legend.box = "vertical",           # Ensures stacked layout of different legend groups
+    
+    # Reduce spacing & padding
+    legend.spacing.x = unit(0, 'cm'),  # Reduce horizontal spacing between attributes
+    legend.spacing.y = unit(0, 'cm'),  # Reduce vertical spacing between rows
+    legend.margin = margin(0, 0, 0, 0),   # Removes outer legend box padding
+    legend.box.margin = margin(0, 0, 0, 0),
+    legend.title = element_text(size = 6, face = "bold"),  
+    legend.text = element_text(size = 6))
+    #scale_x_continuous(breaks = seq(min(cog_per_year_area_vgt$Year), max(cog_per_year_area_vgt$Year))),
+  # Remove white space
+   # Eliminates all margins
+    #color = guide_legend(override.aes = list(size = 4, nrow = 1)),
+     # Shows every 2 years from 2010 to 2024
+  
+
+# Step 4: Save the plot
+ggsave("Longitude as a function of time - Area 1r (2010-2024).png", plot = p, dpi = 600, width = 6, height = 5)
+
+##################################### FOR VGT ONLY LATITUDE #########################################
+
+# Step 3: Plot the data with 3 geom_lines (one for each Dataset), with areas distinguished by color
+p <- ggplot(cog_per_year_area_vgt_up, aes(x = Year, y = lat_cog, color = area, linetype = Dataset)) +
+  
+  # Plot the lines for each dataset and area
+  geom_line(size = 1.2) +
+  
+  # Add text labels for years (optional, not in legend)
+  geom_text(aes(label = Year), vjust = -1, size = 3, show.legend = FALSE) +
+  
+  # Manual color scale for areas (if needed)
+  scale_color_manual(values = c("1r" = "#b8e3e9", "2r" = "#ffce1b", "4" = "#ff746c")) +
+  
+  # Labels for the plot
+  labs(title = "Latitude as a Function of Time",
+       subtitle = "CoG in Areas for VGT",
+       x = "Year",
+       y = "Latitude",
+       color = "Area",
+       linetype = "Dataset") +
+  theme(
+    plot.title = element_text(size = base_size * 1.2, face = "bold"),
+    axis.title = element_text(size = base_size),
+    legend.title = element_text(size = base_size),
+    legend.text = element_text(size = base_size * 0.8),
+    legend.position = "bottom",                # Move the legend to the bottom
+    legend.direction = "horizontal",           # Make the legend items display in a horizontal line
+    strip.text = element_text(size = base_size * 1.1),
+    panel.grid.major = element_line(color = scales::alpha("black", 0.3), size = 0.5),  # Dark major grid lines
+    panel.grid.minor = element_line(color = scales::alpha("black", 0.3), size = 0.5), # Dark minor grid lines
+    panel.background = element_rect(fill = "#ffffff", color = NA)     # White background
+  ) +
+  guides(color = guide_legend(nrow = 1)) +
+  scale_y_continuous(breaks = seq(-2, 10, by = 0.5)) + # Shows every 2 years from 2010 to 2024
+  scale_x_continuous(breaks = seq(2010, 2024, by = 1)) # Shows every 2 years from 2010 to 2024
+
+
+# Step 4: Save the plot
+ggsave("CoG_Latitude_VGT_Areas.png", plot = p, dpi = 300, width = 12, height = 8)
+
+
+
