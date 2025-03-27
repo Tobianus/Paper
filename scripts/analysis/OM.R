@@ -12,9 +12,6 @@ library(gridExtra)
 library(grid)
 library(scales)
 
-#install_github("nissandjac/smsR")
-setwd("C:/Users/chris/Desktop/DTU/R/ORIG/SMSR")
-
 source('R/get_OM_parameters.R')
 source('R/run_agebased_sms_OP.R')
 source('R/addYear.R')
