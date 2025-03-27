@@ -25,7 +25,7 @@ source(here("scripts/functions", "addYear.R"))
 
 # Read parameters from stock assessment
 #parms <- readRDS("~/Github/sandeel_space/sandeel 1r/sandeel_1r_parms.rds")
-parms <- readRDS(here("data/sandeel 1r", "sandeel 1r/area1r.rds"))
+parms <- readRDS(here("data/sandeel 1r", "area1r.rds"))
 
 sas <- parms[[2]]
 df.tmb <- parms[[1]]
@@ -168,16 +168,16 @@ mod3
 ### Create a spatial operating model for sandeel ###
 
 df.new <- addYear(df.OM,
-                  new_years = 10, # Number of years to simulate into the future
-                  #F_future = c(0.36, 0.36, 0) ### ADVICE
+                  new_years = 20, # Number of years to simulate into the future
+                  #F_future = c(0.33, 0.33, 0) ### ADVICE
                   ### FROM LATEST ADVICE
-                  #F_future = c(0, 0.36, 0) ### ADVICE BREXIT
+                  F_future = c(0, 0.33, 0) ### ADVICE BREXIT
                   ### FROM LATEST ADVICE ###Should be 0.36, 036, 0.00 but we drop uk bc 0 F
                   #F_future = c(0, 0.99, 0.001) ### LAST YEAR
                   ### YEAR 2024 VGT ONLY ### 0.56, 044, 0.00 but we drop uk bc 0 F
                   #F_future = c(0.56, 0.44, 0) ### FIVE YEARS
                   ### BEFORE BREXIT RELATIVE PROPORTION LAST 5 YEARS FROM 2024 VGT
-                  F_future = c(0, 0.44, 0) ### FIVE YEARS BREXIT
+                  #F_future = c(0, 0.44, 0) ### FIVE YEARS BREXIT
                   ### RELATIVE PROPORTION LAST 5 YEARS FROM 2024 VGT ### Should be 0.56, 044, 0.00 but we drop uk bc 0 F
                   
 )
@@ -212,7 +212,7 @@ ggplot(SSB, aes(x = years, y = SSB, color = area)) +
   theme_bw() +
   geom_line(linewidth=1.5) + #change to 1.7 for individual plot
   geom_point(size=3.5) + #change to 4 for individual plot
-  geom_vline(aes(xintercept = df.OM$last_year)) +
+  geom_vline(aes(xintercept = 2024)) +
   labs(title = "SSB 2023-2032 YEARS", y = "SSB (Tonnes)", x = "Years") +
   scale_x_continuous(breaks = seq(min(df.new$years), max(df.new$years), by = 3)) +
   theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
@@ -221,7 +221,7 @@ ggplot(SSB, aes(x = years, y = SSB, color = area)) +
   scale_y_continuous(labels = label_comma()) +
   theme(text = element_text(size = 20)) + #change to 20 for individual plot
   theme(legend.position = c(0.93, 0.86), legend.title=element_blank()) + #Use 0.93, 0.88 for individual plot
-  theme(legend.box.background = element_rect(color="black", size=0.3), legend.box.margin = margin(1, 1, 1, 1)) +
+  theme(legend.box.background = element_rect(color="black", linewidth=0.3), legend.box.margin = margin(1, 1, 1, 1)) +
   theme(legend.key.size = unit(1, 'cm'))
 
 #dev.off()
@@ -244,12 +244,12 @@ ggplot(data = SSBsum, aes(x = years, y = SSBtot, fill = Area)) +
   geom_line(color = "#008822", linewidth=1.5) + 
   geom_point(color = "#008822", size=3.5) +
   theme_bw() +
-  geom_vline(aes(xintercept = df.OM$last_year)) +
+  geom_vline(aes(xintercept = 2024)) +
   labs(title = "SSB (SUM) 2023-2032 YEARS", y = "SSB (Tonnes)", x = "Years") +
   geom_hline(yintercept=140824, linetype=3, linewidth=1, color = "black") +
-  #annotate("text", x = 2040, y = 150000, label = "B-escapement", size = 4, color = "black") +
+  annotate("text", x = 2040, y = 150000, label = "B-escapement", size = 4, color = "black") +
   geom_hline(yintercept=105809, linetype=3, linewidth=1, color = "red") +
-  #annotate("text", x = 2041.5, y = 120000, label = "Blim", size = 4, color = "red") +
+  annotate("text", x = 2041.5, y = 120000, label = "Blim", size = 4, color = "red") +
   scale_x_continuous(breaks = seq(min(SSBsum$years), max(SSBsum$years), by = 3)) +
   theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
   theme(axis.text.y = element_text(angle = 45, hjust = 1)) +
@@ -271,11 +271,11 @@ ggplot(data = SSBsum, aes(x = years, y = SSBtot, fill = Area)) +
 #dev.copy(png,'C:/Users/chris/Desktop/DTU/R/ORIG/SMSR/PLOTS/0-0.99-0.001/R P.AREA - 0, 0.99, 0.001.png', width=5000, height=3000, res=300)
 #dev.copy(png,'C:/Users/chris/Desktop/DTU/R/ORIG/SMSR/PLOTS/0-0.44-0/R P.AREA - 0, 0.44, 0.png', width=5000, height=3000, res=300)
 
-ggplot(R.save, aes(x = years, y = R.save,color = area)) +
+ggplot(R.save, aes(x = years, y = R.save/1000000, color = area)) +
   theme_bw() +
   geom_line(linewidth=1.5) +
   geom_point(size=3.5) +
-  geom_vline(aes(xintercept = df.OM$last_year)) +
+  geom_vline(aes(xintercept = 2024)) +
   labs(title = "R (P/AREA) 2023-2032 YEARS", y = "Recruitment (Millions)", x = "Years") +
   scale_x_continuous(breaks = seq(min(df.new$years), max(df.new$years), by = 3)) +
   theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
@@ -293,7 +293,7 @@ ggplot(R.save, aes(x = years, y = R.save,color = area)) +
 ###################### R SUM #######################
 ####################################################
 
-R.savesum <- R.save %>% group_by(years) %>% summarise(R.savetot = sum(R.save)) %>%  
+R.savesum <- R.save %>% group_by(years) %>% summarise(R.savetot = sum(R.save/1000000)) %>%  
   mutate(Area = 'SA1')
 
 #dev.copy(png,'C:/Users/chris/Desktop/DTU/R/ORIG/SMSR/PLOTS/0.36-0.36-0/R SUM - 0.36, 0.36, 0.png', width=5000, height=3000, res=300)
@@ -305,7 +305,7 @@ ggplot(data = R.savesum, aes(x = years, y = R.savetot, fill = Area)) +
   geom_line(color = "#008822", linewidth=1.5) + 
   geom_point(color = "#008822", size=3.5) +
   theme_bw() +
-  geom_vline(aes(xintercept = df.OM$last_year)) +
+  geom_vline(aes(xintercept = 2024)) +
   labs(title = "R (SUM) 2023-2032 YEARS", y = "Recruitment (Millions)", x = "Years") +
   scale_x_continuous(breaks = seq(min(R.savesum$years), max(R.savesum$years), by = 3)) +
   theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
@@ -337,7 +337,7 @@ ggplot(Catch,aes(x = year, y= Ctot, color = space)) +
   theme_bw() +
   geom_line(linewidth=1.5) +
   geom_point(size=3.5) +
-  geom_vline(aes(xintercept = df.OM$last_year)) +
+  geom_vline(aes(xintercept = 2024)) +
   labs(title = "CATCH (P/AREA) 2023-2032 YEARS", y = "Catch (Tonnes)", x = "Years") +
   scale_x_continuous(breaks = seq(min(df.new$years), max(df.new$years), by = 3)) +
   theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
@@ -368,7 +368,7 @@ ggplot(data = CSUM, aes(x = year, y = Ctot, fill = Area)) +
   geom_line(color = "#008822", linewidth=1.5) + 
   geom_point(color = "#008822", size=3.5) +
   theme_bw() +
-  geom_vline(aes(xintercept = df.OM$last_year)) +
+  geom_vline(aes(xintercept = 2024)) +
   labs(title = "CATCH (SUM) 2023-2032 YEARS", y = "Catch (Tonnes)", x = "Years") +
   scale_x_continuous(breaks = seq(min(CSUM$year), max(CSUM$year), by = 3)) +
   theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
@@ -402,7 +402,7 @@ ggplot(Fsea,aes(x = year, y= Ftot/3, color = space)) +
   theme_bw() +
   geom_line(linewidth=1.5) +
   geom_point(size=3.5) +
-  geom_vline(aes(xintercept = df.OM$last_year)) +
+  geom_vline(aes(xintercept = 2024)) +
   labs(title = "F (P/AREA) 2023-2032 YEARS", y = "F (year^(-1))", x = "Years") +
   scale_x_continuous(breaks = seq(min(df.new$years), max(df.new$years), by = 3)) +
   theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
@@ -431,10 +431,10 @@ Fbar <- as.data.frame(x$Fbar) %>%
 #dev.copy(png,'C:/Users/chris/Desktop/DTU/R/ORIG/SMSR/PLOTS/0-0.44-0/F SUM - 0, 0.44, 0.png', width=5000, height=3000, res=300)
 
 ggplot(data = Fbar, aes(x = years, y = Ftot/3, fill = Area)) +
-  geom_line(color = "#008822", linewidth=1.5) + 
-  geom_point(color = "#008822", size=3.5) +
+  geom_line(color = "#008822", linewidth=1.5, show.legend = FALSE) + 
+  geom_point(color = "#008822", size=3.5, show.legend = FALSE) +
   theme_bw() +
-  geom_vline(aes(xintercept = df.OM$last_year)) +
+  geom_vline(aes(xintercept = 2024)) +
   labs(title = "Fbar (SUM) 2023-2032 YEARS", y = "F (year^(-1))", x = "Years") +
   scale_x_continuous(breaks = seq(min(Fbar$year), max(Fbar$year), by = 3)) +
   theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
@@ -464,7 +464,7 @@ SSBPAREA <- ggplot(SSB, aes(x = years, y = SSB, color = area)) +
   theme_bw() +
   geom_line(linewidth=0.7) + #change to 1.7 for individual plot
   geom_point(size=1.5) + #change to 4 for individual plot
-  geom_vline(aes(xintercept = df.OM$last_year)) +
+  geom_vline(aes(xintercept = 2024)) +
   labs(title = "SSB (P/AREA) 2023-2032 YEARS", y = "SSB (Tonnes)", x = "Years") +
   scale_x_continuous(breaks = seq(min(df.new$years), max(df.new$years), by = 3)) +
   theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
@@ -483,15 +483,15 @@ SSBPAREA <- ggplot(SSB, aes(x = years, y = SSB, color = area)) +
 #SUMMING THE 3 AREAS FOR BLIM COMPARISON
 
 SSBSUM <- ggplot(data = SSBsum, aes(x = years, y = SSBtot, fill = Area)) +
-  geom_line(color = "#008822", linewidth=0.7) + 
-  geom_point(color = "#008822", size=1.5) +
+  geom_line(color = "#008822", linewidth=0.7, show.legend = FALSE) + 
+  geom_point(color = "#008822", size=1.5, show.legend = FALSE) +
   theme_bw() +
-  geom_vline(aes(xintercept = df.OM$last_year)) +
+  geom_vline(aes(xintercept = 2024)) +
   labs(title = "SSB (SUM) 2023-2032 YEARS", y = "SSB (Tonnes)", x = "Years") +
   geom_hline(yintercept=140824, linetype=3, linewidth=1, color = "black") +
-  #annotate("text", x = 2040, y = 150000, label = "B-escapement", size = 4, color = "black") +
+  annotate("text", x = 2040, y = 140824, label = "B-escapement", size = 4, color = "black") +
   geom_hline(yintercept=105809, linetype=3, linewidth=1, color = "red") +
-  #annotate("text", x = 2041.5, y = 120000, label = "Blim", size = 4, color = "red") +
+  annotate("text", x = 2041.5, y = 105809, label = "Blim", size = 4, color = "red") +
   scale_x_continuous(breaks = seq(min(SSBsum$years), max(SSBsum$years), by = 3)) +
   theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
   theme(axis.text.y = element_text(angle = 45, hjust = 1)) +
@@ -506,11 +506,11 @@ SSBSUM <- ggplot(data = SSBsum, aes(x = years, y = SSBtot, fill = Area)) +
 #################### R PER AREA ####################
 ####################################################
 
-RPAREA <- ggplot(R.save, aes(x = years, y = R.save,color = area)) +
+RPAREA <- ggplot(R.save, aes(x = years, y = R.save/1000000, color = area)) +
   theme_bw() +
   geom_line(linewidth=0.7) +
   geom_point(size=1.5) +
-  geom_vline(aes(xintercept = df.OM$last_year)) +
+  geom_vline(aes(xintercept = 2024)) +
   labs(title = "R (P/AREA) 2023-2032 YEARS", y = "Recruitment (Millions)", x = "Years") +
   scale_x_continuous(breaks = seq(min(df.new$years), max(df.new$years), by = 3)) +
   theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
@@ -527,10 +527,10 @@ RPAREA <- ggplot(R.save, aes(x = years, y = R.save,color = area)) +
 ####################################################
 
 RSUM <- ggplot(data = R.savesum, aes(x = years, y = R.savetot, fill = Area)) +
-  geom_line(color = "#008822", linewidth=0.7) + 
-  geom_point(color = "#008822", size=1.5) +
+  geom_line(color = "#008822", linewidth=0.7, show.legend = FALSE) + 
+  geom_point(color = "#008822", size=1.5, show.legend = FALSE) +
   theme_bw() +
-  geom_vline(aes(xintercept = df.OM$last_year)) +
+  geom_vline(aes(xintercept = 2024)) +
   labs(title = "R (SUM) 2023-2032 YEARS", y = "Recruitment (Millions)", x = "Years") +
   scale_x_continuous(breaks = seq(min(R.savesum$years), max(R.savesum$years), by = 3)) +
   theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
@@ -550,7 +550,7 @@ CPAREA <- ggplot(Catch,aes(x = year, y= Ctot, color = space)) +
   theme_bw() +
   geom_line(linewidth=0.7) +
   geom_point(size=1.5) +
-  geom_vline(aes(xintercept = df.OM$last_year)) +
+  geom_vline(aes(xintercept = 2024)) +
   labs(title = "CATCH (P/AREA) 2023-2032 YEARS", y = "Catch (Tonnes)", x = "Years") +
   scale_x_continuous(breaks = seq(min(df.new$years), max(df.new$years), by = 3)) +
   theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
@@ -567,10 +567,10 @@ CPAREA <- ggplot(Catch,aes(x = year, y= Ctot, color = space)) +
 #############################################
 
 CSUM <- ggplot(data = CSUM, aes(x = year, y = Ctot, fill = Area)) +
-  geom_line(color = "#008822", linewidth=0.7) + 
-  geom_point(color = "#008822", size=1.5) +
+  geom_line(color = "#008822", linewidth=0.7, show.legend = FALSE) + 
+  geom_point(color = "#008822", size=1.5, show.legend = FALSE) +
   theme_bw() +
-  geom_vline(aes(xintercept = df.OM$last_year)) +
+  geom_vline(aes(xintercept = 2024)) +
   labs(title = "CATCH (SUM) 2023-2032 YEARS", y = "Catch (Tonnes)", x = "Years") +
   scale_x_continuous(breaks = seq(min(CSUM$year), max(CSUM$year), by = 3)) +
   theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
@@ -590,7 +590,7 @@ FPAREA <- ggplot(Fsea,aes(x = year, y= Ftot, color = space)) +
   theme_bw() +
   geom_line(linewidth=0.7) +
   geom_point(size=1.5) +
-  geom_vline(aes(xintercept = df.OM$last_year)) +
+  geom_vline(aes(xintercept = 2024)) +
   labs(title = "F (P/AREA) 2023-2032 YEARS", y = "F (year^(-1))", x = "Years") +
   scale_x_continuous(breaks = seq(min(df.new$years), max(df.new$years), by = 3)) +
   theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
@@ -607,10 +607,10 @@ FPAREA <- ggplot(Fsea,aes(x = year, y= Ftot, color = space)) +
 #############################################
 
 FSUM <- ggplot(data = Fbar, aes(x = years, y = Ftot/3, fill = Area)) +
-  geom_line(color = "#008822", linewidth=0.7) + 
-  geom_point(color = "#008822", size=1.5) +
+  geom_line(color = "#008822", linewidth=0.7, show.legend = FALSE) + 
+  geom_point(color = "#008822", size=1.5, show.legend = FALSE) +
   theme_bw() +
-  geom_vline(aes(xintercept = df.OM$last_year)) +
+  geom_vline(aes(xintercept = 2024)) +
   labs(title = "Fbar (SUM) 2023-2032 YEARS", y = "F (year^(-1))", x = "Years") +
   scale_x_continuous(breaks = seq(min(Fbar$year), max(Fbar$year), by = 3)) +
   theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
@@ -659,7 +659,7 @@ S2 <- ggplot(SSB, aes(x = years, y = SSB, color = area)) +
   theme_bw() +
   geom_line(linewidth=0.7) + #change to 1.7 for individual plot
   geom_point(size=1.5) + #change to 4 for individual plot
-  geom_vline(aes(xintercept = df.OM$last_year)) +
+  geom_vline(aes(xintercept = 2024)) +
   labs(title = "SENSITIVITY - 0.1, 0.8, 0.1", y = "SSB (Tonnes)", x = "Years") +
   scale_x_continuous(breaks = seq(min(df.new$years), max(df.new$years), by = 3)) +
   theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
@@ -743,7 +743,7 @@ CATCHGRID <- ggplot(data = CATCHALLSUMPLOT, aes(x = year, y = Ctot)) +
   scale_color_manual(values=c("#00264A", "#00264A", "#66a103", "#66a103", "#f8766d")) +
   scale_linetype_manual(values=c("solid", "solid", "dashed", "dashed", "dotted"))+
   theme_bw() +
-  #geom_vline(aes(xintercept = df.OM$last_year)) +
+  geom_vline(aes(xintercept = 2024)) +
   labs(title = "CATCH SCENARIOS 2022-2032 YEARS", y = "Catch (Tonnes)", x = "Years") +
   scale_x_continuous(breaks = seq(min(CATCHALLSUMPLOT$year), max(CATCHALLSUMPLOT$year), by = 3)) +
   theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
@@ -824,7 +824,7 @@ SSBGRID <- ggplot(data = SSBALLSUMPLOT, aes(x = years, y = SSBtot)) +
   scale_color_manual(values=c("#00264A", "#00264A", "#66a103", "#66a103", "#f8766d")) +
   scale_linetype_manual(values=c("solid", "solid", "dashed", "dashed", "dotted"))+
   theme_bw() +
-  #geom_vline(aes(xintercept = df.OM$last_year), linewidth=1) +
+  geom_vline(aes(xintercept = 2024), linewidth=1) +
   labs(title = "SSB SCENARIOS 2022-2032 YEARS", y = "SSB (Tonnes)", x = "Years") +
   scale_x_continuous(breaks = seq(min(SSBALLSUMPLOT$years), max(SSBALLSUMPLOT$years), by = 3)) +
   theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
