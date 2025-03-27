@@ -11,20 +11,21 @@ library(ggplot2)
 library(gridExtra)
 library(grid)
 library(scales)
+library(here)
 
 #Using the new area selection script 'Coords_areas_catches_area1.R', We have now assigned a new F in the OM which calculates 
 #the relative distribution of catches from 2010 to 2024. We then need to run the script 'F_NIS gives' which outputs
 #'relative.catch'. Relative catch is then fed into 'R/get_OM_parameters_NIS_fix.R' when the model is run.
 
-source('scripts/analysis/Coords_areas_catches_area1r')
-source('scripts/analysis/F_distribution.R')
-source('scripts/functions/get_OM_parameters_F_distribution.R')
-source('scripts/functions/run_agebased_sms_OP.R')
-source('scripts/functions/addYear.R')
+source(here("scripts/analysis", "OM_areas.R"))
+source(here("scripts/analysis", "F_distribution.R"))
+source(here("scripts/functions", "get_OM_parameters_F_distribution.R"))
+source(here("scripts/functions", "run_agebased_sms_OP.R"))
+source(here("scripts/functions", "addYear.R"))
 
 # Read parameters from stock assessment
 #parms <- readRDS("~/Github/sandeel_space/sandeel 1r/sandeel_1r_parms.rds")
-parms <- readRDS("sandeel 1r/area1r.rds")
+parms <- readRDS(here("data/sandeel 1r", "sandeel 1r/area1r.rds"))
 
 sas <- parms[[2]]
 df.tmb <- parms[[1]]
