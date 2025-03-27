@@ -12,7 +12,9 @@ library(gridExtra)
 library(grid)
 library(scales)
 
-source('R/get_OM_parameters.R')
+#Make sure to run F_NIS first...
+
+source('R/get_OM_parameters_NIS_fix.R')
 source('R/run_agebased_sms_OP.R')
 source('R/addYear.R')
 
