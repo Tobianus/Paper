@@ -92,13 +92,13 @@ southern_coords <- points_outside_uk_eez %>% filter(st_coordinates(.)[,2] < lati
 vessel_data$group <- NA
 
 # For UK EEZ points
-vessel_data$group[st_intersects(vessel_sf, uk_eez, sparse = FALSE)] <- "UK EEZ"
+vessel_data$group[st_intersects(vessel_sf, uk_eez, sparse = FALSE)] <- "Sub-Area 2"
 
 # For Northern non-UK points
-vessel_data$group[st_coordinates(vessel_sf)[,2] >= latitude_threshold & !st_intersects(vessel_sf, uk_eez, sparse = FALSE)] <- "EU North"
+vessel_data$group[st_coordinates(vessel_sf)[,2] >= latitude_threshold & !st_intersects(vessel_sf, uk_eez, sparse = FALSE)] <- "Sub-Area 3"
 
 # For Southern non-UK points
-vessel_data$group[st_coordinates(vessel_sf)[,2] < latitude_threshold & !st_intersects(vessel_sf, uk_eez, sparse = FALSE)] <- "EU South"
+vessel_data$group[st_coordinates(vessel_sf)[,2] < latitude_threshold & !st_intersects(vessel_sf, uk_eez, sparse = FALSE)] <- "Sub-Area 1"
 
 # Step 9: Merge with catch data and summarize by group
 catch_summary <- vessel_data %>%
@@ -119,5 +119,5 @@ catch_by_year <- vessel_data %>%
 #CHANGE THE ORDER OF THE AREAS IN THE DATAFRAME FOR PLOTTING WITH UK FIRST
 #I SET THIS UP SPECIFICALLY FOR PLOTTING THIS VGT AGAINST THE MODEL catch.save.age output
 catch_by_year$group <- factor(catch_by_year$group,
-                            levels = c("UK EEZ", "EU North", "EU South"))
+                            levels = c("Sub-Area 1", "Sub-Area 2", "Sub-Area 3"))
 
