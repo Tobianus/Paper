@@ -24,11 +24,11 @@ get_OM_parameters <- function(df.tmb,
                               nspace = 1,
                               moveinit = 1,
                               movemax = 0.3,
-                              moverecruit = 0,
+                              moverecruit = NULL,
                               rec.space = 1,
                               moveslope = .7,
                               movefifty = 1,
-                              migration_matrix = NULL) {  # <- new argument
+                              migration_matrix = 1) {  # <- new argument
   
   # Do the movement parameters
   # Do the movement parameters
@@ -73,15 +73,29 @@ get_OM_parameters <- function(df.tmb,
     move <- TRUE
   }
   
-  if (move == TRUE && is.null(migration_matrix)) {
-    # Use old movemax method if no matrix is given
-    for (j in 1:nspace) {
-      for (i in 1:df.tmb$nseason) {
-        movemat[, , j, i] <- movemax[j] / (1 + exp(-moveslope * (age - movefifty)))
+  if (move == TRUE) {
+    if (!is.null(migration_matrix)) {
+      # Expand the static matrix across all age/year/season dimensions
+      for (yr in 1:df.tmb$nyear) {
+        for (season in 1:df.tmb$nseason) {
+          for (from in 1:nspace) {
+            for (to in 1:nspace) {
+              movemat[, yr, from, season] <- migration_matrix[to, from]
+            }
+          }
+        }
       }
-      movemat[1, , j, ] <- moverecruit[j]
+    } else {
+      # Use legacy logistic method
+      for (j in 1:nspace) {
+        for (i in 1:df.tmb$nseason) {
+          movemat[, , j, i] <- movemax[j] / (1 + exp(-moveslope * (age - movefifty)))
+        }
+        movemat[1, , j, ] <- moverecruit[j]
+      }
     }
   }
+  
   
   
   if (is.null(sas) == FALSE) {
@@ -162,7 +176,7 @@ get_OM_parameters <- function(df.tmb,
     rec.space = rec.space,
     moverecruit = moverecruit,
     move = move,
-    movemat_custom = migration_matrix,  # <- new line
+    migration_matrix = migration_matrix,  # <- new line
     rseason = df.tmb$recseason,
     Fmodel = "est",
     Ninit = c(

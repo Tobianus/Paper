@@ -585,7 +585,8 @@ run.agebased.sms.op <- function(df){
                    age_catch = age_comps_catch,
                    Z = Z.save,
                    Fseason = Fseason.save,
-                   Fsel = Fsel.save
+                   Fsel = Fsel.save,
+                   migration_matrix = migration_matrix
                )
 
   return(df.out)

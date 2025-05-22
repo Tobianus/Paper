@@ -19,6 +19,20 @@ library(here)
 #the relative distribution of catches from 2010 to 2024. We then need to run the script 'F_NIS gives' which outputs
 #'relative.catch'. Relative catch is then fed into 'R/get_OM_parameters_NIS_fix.R' when the model is run.
 
+migration_matrix <- matrix(c(
+  #To:  1     2     3
+  0.03, 0.0,  0.18, # From 1 -----> EU SOUTH
+  0.0,  0.41, 0.14, # From 2 -----> UK
+  0.0,  0.02, 0.14  # From 3 -----> EU NORTH
+), nrow = 3, byrow = TRUE)
+
+#migration_matrix <- matrix(c(
+#To:  1     2     3
+#      0.50,0.70,0.40,   # From 1 -----> EU SOUTH
+#      0.1,0.1,0.1,   # From 2 -----> UK
+#      0.50,0.90,0.70   # From 3 -----> EU NORTH
+#), nrow = 3, byrow = TRUE)
+
 source(here("scripts/analysis", "OM_areas.R"))
 #source(here("scripts/analysis", "F_distribution.R"))
 source(here("scripts/functions", "get_OM_parameters_move.R"))
@@ -32,19 +46,12 @@ parms <- readRDS(here("scripts/data/sandeel 1r", "area1r.rds"))
 
 sas <- parms[[2]]
 df.tmb <- parms[[1]]
-
-migration_matrix <- matrix(c(
-#To:  1     2     3
-    0.03, 0.0,  0.18,   # From 1 -----> EU SOUTH
-    0.0,  0.41, 0.14,   # From 2 -----> UK
-    0.0,  0.02,  0.14   # From 3 -----> EU NORTH
-), nrow = 3, byrow = TRUE)
-
 df.OM <- get_OM_parameters(df.tmb, sas,
                            nspace = 3,
                            rec.space = c(0.03, 0.80, 0.14),
                            #moverecruit = c(0.1,0.7,0.2),
                            migration_matrix = migration_matrix)
+                           #movemax = c(0.1,0.2,0.1) # Movement between areas
 
 #df.OM$recruitment.fit <- list(mod1,mod2,mod3)
 
