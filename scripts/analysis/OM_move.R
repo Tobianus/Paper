@@ -20,18 +20,11 @@ library(here)
 #'relative.catch'. Relative catch is then fed into 'R/get_OM_parameters_NIS_fix.R' when the model is run.
 
 migration_matrix <- matrix(c(
-  #To:  1     2     3
-  0.03, 0.0,  0.18, # From 1 -----> EU SOUTH
-  0.0,  0.41, 0.14, # From 2 -----> UK
-  0.0,  0.02, 0.14  # From 3 -----> EU NORTH
+#To:  EU SOUTH - UK - EU NORTH
+      0.03,     0.0,     0.18, # From 1 -----> EU SOUTH
+      0.0,      0.41,    0.14, # From 2 -----> UK
+      0.0,      0.02,    0.14  # From 3 -----> EU NORTH
 ), nrow = 3, byrow = TRUE)
-
-#migration_matrix <- matrix(c(
-#To:  1     2     3
-#      0.50,0.70,0.40,   # From 1 -----> EU SOUTH
-#      0.1,0.1,0.1,   # From 2 -----> UK
-#      0.50,0.90,0.70   # From 3 -----> EU NORTH
-#), nrow = 3, byrow = TRUE)
 
 source(here("scripts/analysis", "OM_areas.R"))
 #source(here("scripts/analysis", "F_distribution.R"))
@@ -48,7 +41,7 @@ sas <- parms[[2]]
 df.tmb <- parms[[1]]
 df.OM <- get_OM_parameters(df.tmb, sas,
                            nspace = 3,
-                           rec.space = c(0.03, 0.80, 0.14),
+                           rec.space = c(0.03, 0.70, 0.14),
                            #moverecruit = c(0.1,0.7,0.2),
                            migration_matrix = migration_matrix)
                            #movemax = c(0.1,0.2,0.1) # Movement between areas
@@ -60,8 +53,6 @@ x <- run.agebased.sms.op(df.OM)
 str(df.OM)
 
 #########################  CATCH START #############################
-# Define font sizes
-base_size <- 16
 # Step 1: Filter for season 1 (4th dimension)
 catch_season1 <- x$Catch.save.age[,,, "1"]
 # Step 2: Sum over the age dimension (1st dimension)
@@ -119,14 +110,14 @@ p <- ggplot(catch_df_filtered, aes(x = Year, y = total_catch, color = group)) +
   scale_color_manual(values = c("Sub-Area 1" = "#619cff", "Sub-Area 2" = "#f8766d", "Sub-Area 3" = "#00ba38")) + # Color for each area
   #scale_shape_manual(values = c("EU South" = 16, "UK EEZ" = 16, "EU North" = 16)) +  # Custom shapes
   theme(
-    plot.title = element_text(size = base_size * 1.2, face = "bold"),
-    axis.title = element_text(size = base_size),
-    axis.text = element_text(size = base_size * 0.8),
-    legend.title = element_text(size = base_size),
-    legend.text = element_text(size = base_size * 0.8),
+    plot.title = element_text(size = 12, face = "bold"),
+    axis.title = element_text(size = 12),
+    axis.text = element_text(size = 12),
+    legend.title = element_text(size = 12),
+    legend.text = element_text(size = 12),
     legend.position = "bottom",                # Move the legend to the bottom
     legend.direction = "horizontal",           # Make the legend items display in a horizontal line
-    strip.text = element_text(size = base_size * 1.1),
+    strip.text = element_text(size = 12),
     panel.background = element_rect(fill = "#F0F2F2"),
     plot.background = element_rect(fill = "white")
   ) +
