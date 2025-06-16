@@ -1,0 +1,26 @@
+{
+    "id": "3E05F727",
+    "path": "C:/Users/chris/Desktop/GIT/Paper/scripts/analysis/F_distribution.R",
+    "project_path": "scripts/analysis/F_distribution.R",
+    "type": "r_source",
+    "hash": "271122488",
+    "contents": "",
+    "dirty": false,
+    "created": 1743077494565.0,
+    "source_on_save": false,
+    "relative_order": 4,
+    "properties": {
+        "source_window_id": "",
+        "Source": "Source",
+        "cursorPosition": "10,2",
+        "scrollLine": "0"
+    },
+    "folds": "",
+    "lastKnownWriteTime": 1747983381,
+    "encoding": "UTF-8",
+    "collab_server": "",
+    "source_window": "",
+    "last_content_update": 1747983381,
+    "read_only": false,
+    "read_only_alternatives": []
+}
