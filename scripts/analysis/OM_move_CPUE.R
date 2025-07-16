@@ -35,16 +35,18 @@ migration_matrix <- matrix(c(
 
 setwd("C:/Users/chris/Desktop/GIT/Paper/scripts/analysis/")
 
-source(here("scripts/analysis", "OM_areas_CPUE.R"))
+source("OM_areas_CPUE.R")
 #source(here("scripts/analysis", "F_distribution.R"))
 
 setwd("C:/Users/chris/Desktop/GIT/Paper/scripts/functions/")
-source(here("scripts/functions", "get_OM_parameters_move.R"))
-source(here("scripts/functions", "run_agebased_sms_OP_move.R"))
-source(here("scripts/functions", "addYear.R"))
 
+source("get_OM_parameters_move.R")
+source("run_agebased_sms_OP_move.R")
+source("addYear.R")
+
+setwd("C:/Users/chris/Desktop/GIT/Paper/scripts/data/sandeel 1r")
 # Read parameters from stock assessment
-parms <- readRDS(here("scripts/data/sandeel 1r", "area1r.rds"))
+parms <- readRDS("area1r.rds")
 #parms <- readRDS(here("scripts/data/sandeel 1r", "sandeel_1r_parms.rds"))
 
 sas <- parms[[2]]
@@ -60,46 +62,42 @@ df.OM <- get_OM_parameters(df.tmb, sas,
 
 x <- run.agebased.sms.op(df.OM)
 
+
 str(df.OM)
 
-#########################  CATCH START #############################
-# Step 1: Filter for season 1 (4th dimension)
-catch_season1 <- x$Catch.save.age[,,, "1"]
-# Step 2: Sum over the age dimension (1st dimension)
-# This will result in a 2D array with dimensions year and space
+library(dplyr)
+library(tidyr)
 
-#The apply() function is used to apply a function (in this case, sum) to a specific set of dimensions of an array.
-#c(2, 3) means that we are going to apply the sum() function across the 1st dimension (which is Age). We are keeping 
-#the Year and Space dimensions (2nd and 3rd dimensions) intact.
-catch_summed <- apply(catch_season1, c(2, 3), sum)  # c(2,3) means sum across the 1st dimension (age)
+# Convert to long format
+Nsave <- as.data.frame.table(x$N.save.age, responseName = "N")
 
-# Step 3: Convert to a data frame for easier manipulation and groupby operations
-catch_df <- as.data.frame(as.table(catch_summed))  # Convert array to data frame
-colnames(catch_df) <- c("Year", "space", "total_catch")  # Rename columns for clarity
-# Step 4: Convert Year and Space to numeric (if necessary)
-catch_df$Year <- as.numeric(as.character(catch_df$Year))
-catch_df$space <- as.numeric(as.character(catch_df$space))
-# Now catch_df has the total catch summed over age for each combination of year and space
+allmeans_nage <- Nsave %>%
+  filter(season == 2) %>%
+  mutate(
+    year = as.numeric(as.character(year)),
+    age = as.numeric(as.character(age)),
+    space = as.numeric(as.character(space)),
+    group = case_when(
+      space == 1 ~ "Sub-Area 1",
+      space == 2 ~ "Sub-Area 2",
+      space == 3 ~ "Sub-Area 3"
+    )
+  ) %>%
+  filter(space %in% 1:3, year %in% 2010:2022) %>%
+  group_by(group, year, age) %>%
+  summarise(total_cpue = mean(N, na.rm = TRUE), .groups = "drop") %>%
+  group_by(age) %>%
+  mutate(std_N = total_cpue / mean(total_cpue)) %>%
+  ungroup() %>%
+  
+  rename(Year = year, Age = age) %>%
+  mutate(year = Year, Year = as.numeric(Year)) %>%
+  select(Year, group, Age, total_cpue, year)
 
-# Step 5: Filter for years 2010 onwards and add descriptive space names
-catch_df_filtered <- catch_df %>%
-  filter(Year >= 2010) %>% 
-  mutate(group = case_when(
-    #space == 1 ~ "UK EEZ",
-    #space == 2 ~ "EU North",
-    #space == 3 ~ "EU South",
-    space == 1 ~ "Sub-Area 1",
-    space == 2 ~ "Sub-Area 2",
-    space == 3 ~ "Sub-Area 3",
-    TRUE ~ as.character(space)
-  )) %>%
-  select(-space) %>% 
-  select(Year, group, total_catch)
+# Factor group for plotting order
+allmeans_nage$group <- factor(allmeans_nage$group, levels = c("Sub-Area 1", "Sub-Area 2", "Sub-Area 3"))
 
-# CHANGE THE ORDER OF THE AREAS IN THE DATAFRAME FOR PLOTTING WITH UK FIRST
-catch_df_filtered$group <- factor(catch_df_filtered$group,
-                                  #levels = c("UK EEZ", "EU North", "EU South"))
-                                  levels = c("Sub-Area 1", "Sub-Area 2", "Sub-Area 3"))
+
 
 
 setwd("C:/Users/chris/Desktop/DTU/R/ORIG/SMSR/PLOTS")

@@ -92,13 +92,13 @@ southern_coords <- points_outside_uk_eez %>% filter(st_coordinates(.)[,2] < lati
 vessel_data$group <- NA
 
 # For UK EEZ points
-vessel_data$group[st_intersects(vessel_sf, uk_eez, sparse = FALSE)] <- "UK EEZ"
+vessel_data$group[st_intersects(vessel_sf, uk_eez, sparse = FALSE)] <- "Sub-Area 2"
 
 # For Northern non-UK points
-vessel_data$group[st_coordinates(vessel_sf)[,2] >= latitude_threshold & !st_intersects(vessel_sf, uk_eez, sparse = FALSE)] <- "EU North"
+vessel_data$group[st_coordinates(vessel_sf)[,2] >= latitude_threshold & !st_intersects(vessel_sf, uk_eez, sparse = FALSE)] <- "Sub-Area 3"
 
 # For Southern non-UK points
-vessel_data$group[st_coordinates(vessel_sf)[,2] < latitude_threshold & !st_intersects(vessel_sf, uk_eez, sparse = FALSE)] <- "EU South"
+vessel_data$group[st_coordinates(vessel_sf)[,2] < latitude_threshold & !st_intersects(vessel_sf, uk_eez, sparse = FALSE)] <- "Sub-Area 1"
 
 # Step 9: Merge with catch data and summarize by group
 catch_summary <- vessel_data %>%
@@ -120,8 +120,6 @@ catch_by_year <- vessel_data %>%
 #I SET THIS UP SPECIFICALLY FOR PLOTTING THIS VGT AGAINST THE MODEL catch.save.age output
 #catch_by_year$group <- factor(catch_by_year$group,
                             #levels = c("UK EEZ", "EU North", "EU South"))
-
-base_size <- 16
 
 # Step 10: Plot the total catches over time for the three groups
 p <- ggplot(catch_by_year, aes(x = Year, y = total_catch, color = group)) +
@@ -194,7 +192,7 @@ names(pol_df)[3] <- c("BankID")
 ###########################################################
 
 dogger <- st_read('DATA/SHAPEFILES/DOGGER 2019/Natura2000_end2019_shp/Natura2000_end2019_epsg3035.shp', ) %>% 
-  filter(SITECODE %in% c('DE1003301', 'UK0030352', 'NL2008001'))
+  filter(SITECODE %in% c('UK0030352'))
 
 ###########################################################
 ################### READ IN ICES SQAURES ##################
@@ -274,135 +272,4 @@ catch_by_year <- vessel_data %>%
 
 # CHANGE THE ORDER OF THE AREAS IN THE DATAFRAME FOR PLOTTING WITH UK FIRST
 catch_by_year$group <- factor(catch_by_year$group,
-                              levels = c("UK EEZ", "EU North", "EU South"))
-
-setwd("C:/Users/chris/Desktop/DTU/R/ORIG/SMSR/PLOTS")
-
-p <- ggplot() +
-  # Plot ICES AREAS, EEZ, and country borders
-  geom_sf(data = cropped_ices_rec, aes(fill = group), fill = "#c6e9e3", size = 0.5, alpha = 0.8, show.legend = FALSE) +
-  
-  # Plot the sand banks without adding to legend
-  geom_polygon(data = pol_df_cropped, aes(x, y, group = BankID), fill = "#c2bdb9", alpha = 0.6, show.legend = FALSE) +
-  
-  # Plot EEZ, country borders, and Dogger Bank without adding to legend
-  geom_sf(data = cropped_eez, size = 0.5, fill = NA, show.legend = FALSE) +
-  geom_sf(data = cropped_country_boarders, fill = "#219175", show.legend = FALSE) +
-  geom_sf(data = dogger, fill = "#c2bdb9", alpha = 0.10, show.legend = FALSE, linetype = "dashed") +
-  
-  # Plot center of gravity points for each year and area
-  #geom_point(data = catch_by_year, aes(x = lon, y = lat, color = group, size = total_catch), alpha = 0.4) +  # Plot catch points with size based on total catch
-  geom_point(data = catch_by_year, aes(x = lon, y = lat, color = group, size = total_catch), 
-             position = position_jitter(width = 0.1, height = 0.1), alpha = 0.6) +
-  #geom_density_2d(data = catch_by_year, aes(x = lon, y = lat), color = "black", size = 0.3) +
-  #geom_point(data = catch_by_year, aes(x = lon, y = lat, color = group, size = total_catch, shape = factor(Year))) +
-
-#scale_color_manual(values = c("UK EEZ" = "#f8766d", "EU North" = "#00ba38", "EU South" = "#619cff")) + # Custom colors for groups
-  labs(title = "Sandeel Sub-Areas in SA 1 (2010-2024)",
-       x = "Longitude",
-       y = "Latitude",
-       color = "Group",
-       size = "Weight Key - Catches (1000/tonnes)") + # Ensure the legend titles are explicit
-  
-  scale_size_continuous(
-    range = c(0.5, 10),  # Define the smallest and largest point sizes
-    limits = c(0, max(catch_by_year$total_catch)),  # Ensure the legend matches actual values
-    breaks = c(min(catch_by_year$total_catch), 
-               median(catch_by_year$total_catch), 
-               max(catch_by_year$total_catch)),  # Define meaningful breakpoints
-    labels = function(x) format(x, scientific = FALSE)  # Force scientific notation for consistency
-  ) +
-  
-  theme(
-    plot.title = element_text(size = 10, face = "bold"),
-    axis.title = element_text(size = 10, face = "bold"),
-    axis.text = element_text(size = 10, face = "bold"),
-    
-    # Legend positioning
-    legend.position = "bottom",## <- here
-    legend.direction = "horizontal",   # Titles and attributes stay in a single row
-    legend.box = "vertical",           # Ensures stacked layout of different legend groups
-    
-    # Reduce spacing & padding
-    legend.spacing.x = unit(0, 'cm'),  # Reduce horizontal spacing between attributes
-    legend.spacing.y = unit(0, 'cm'),  # Reduce vertical spacing between rows
-    legend.margin = margin(0, 0, 0, 0),   # Removes outer legend box padding
-    legend.box.margin = margin(0, 0, 0, 0),
-    legend.title = element_text(size = 7, face = "bold"),  
-    legend.text = element_text(size = 7),
-    
-    # Remove white space
-    plot.margin = margin(10, 0, 10, 0)  # Eliminates all margins
-  ) +
-    guides(
-    color = guide_legend(override.aes = list(size = 5)),
-    size = guide_legend(override.aes = list(size = c(0.5, 5, 10))))
-
-ggsave("Sandeel Sub-Areas in SA 1 (2010-2024).png", plot = p, dpi = 300, width = 8, height = 8)
-
-#################### FACET ######################
-
-p <- ggplot() +
-  # Plot ICES AREAS, EEZ, and country borders
-  geom_sf(data = cropped_ices_rec, aes(fill = group), fill = "#c6e9e3", size = 0.5, alpha = 0.8, show.legend = FALSE) +
-  
-  # Plot the sand banks without adding to legend
-  geom_polygon(data = pol_df_cropped, aes(x, y, group = BankID), fill = "#c2bdb9", alpha = 0.6, show.legend = FALSE) +
-  
-  # Plot EEZ, country borders, and Dogger Bank without adding to legend
-  geom_sf(data = cropped_eez, size = 0.5, fill = NA, show.legend = FALSE) +
-  geom_sf(data = cropped_country_boarders, fill = "#219175", show.legend = FALSE) +
-  geom_sf(data = dogger, fill = "#c2bdb9", alpha = 0.10, show.legend = FALSE, linetype = "dashed") +
-  
-  # Plot center of gravity points for each year and area
-  #geom_point(data = catch_by_year, aes(x = lon, y = lat, color = group, size = total_catch), alpha = 0.4) +  # Plot catch points with size based on total catch
-  geom_point(data = catch_by_year, aes(x = lon, y = lat, color = group, size = total_catch), 
-             position = position_jitter(width = 0.1, height = 0.1)) +
-  #geom_density_2d(data = catch_by_year, aes(x = lon, y = lat), color = "black", size = 0.3) +
-  #geom_point(data = catch_by_year, aes(x = lon, y = lat, color = group, size = total_catch, shape = factor(Year))) +
-  
-  #scale_color_manual(values = c("UK EEZ" = "#f8766d", "EU North" = "#00ba38", "EU South" = "#619cff")) + # Custom colors for groups
-  labs(title = "Sandeel Sub-Areas in SA 1 (2010-2024)",
-       x = "Longitude",
-       y = "Latitude",
-       color = "Group",
-       size = "Size Key - Catches 1000/tonnes") + # Ensure the legend titles are explicit
-  
-  scale_size_continuous(
-    range = c(0.5, 10),  # Define the smallest and largest point sizes
-    limits = c(0, max(catch_by_year$total_catch)),  # Ensure the legend matches actual values
-    breaks = c(min(catch_by_year$total_catch), 
-               median(catch_by_year$total_catch), 
-               max(catch_by_year$total_catch)),  # Define meaningful breakpoints
-    labels = function(x) format(x, scientific = FALSE)  # Force scientific notation for consistency
-  ) +
-  facet_wrap(~Year, ncol = 5) +
-  
-  theme(
-    plot.title = element_text(size = 10, face = "bold"),
-    axis.title = element_text(size = 10, face = "bold"),
-    axis.text = element_text(size = 10, face = "bold"),
-    
-    # Legend positioning
-    legend.position = "bottom",## <- here
-    legend.direction = "horizontal",   # Titles and attributes stay in a single row
-    legend.box = "vertical",           # Ensures stacked layout of different legend groups
-    
-    # Reduce spacing & padding
-    legend.spacing.x = unit(0, 'cm'),  # Reduce horizontal spacing between attributes
-    legend.spacing.y = unit(0, 'cm'),  # Reduce vertical spacing between rows
-    legend.margin = margin(0, 0, 0, 0),   # Removes outer legend box padding
-    legend.box.margin = margin(0, 0, 0, 0),
-    legend.title = element_text(size = 7, face = "bold"),  
-    legend.text = element_text(size = 7),
-    
-    # Remove white space
-    plot.margin = margin(10, 0, 10, 0)  # Eliminates all margins
-  ) +
-  guides(
-    color = guide_legend(override.aes = list(size = 5)),
-    size = guide_legend(override.aes = list(size = c(0.5, 5, 10))))
-
-ggsave("Sandeel Sub-Areas in SA 1 (2010-2024).png", plot = p, dpi = 300, width = 8, height = 8)
-
-
+                              levels = c("Sub-Area 1", "Sub-Area 2", "Sub-Area 3"))

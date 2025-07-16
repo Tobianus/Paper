@@ -14,7 +14,7 @@ library(scales)
 library(sf)
 library(scales)
 
-setwd("C:/Users/chris/Desktop/GIT/Paper")
+setwd("C:/Users/chris/Desktop/DPPO/ICES-DATRAS/CASPER/")
 source("C:/Users/chris/Desktop/DTU/R/ORIG/myfunctions.R")
 
 # Step 1: Load the two CSV files and clean up the data
@@ -22,15 +22,15 @@ source("C:/Users/chris/Desktop/DTU/R/ORIG/myfunctions.R")
 #area information e.g. 1r, 2r, 3r etc. I am matching the area data with this existing data sheet to
 #the vgt data to easily assign the area information to the vgt datasheet.
 
-load("scripts/data/sandeel 1r/nage_space.Rdata")  # this loads an object into your environment
+load("nage_space_clean.Rdata")  # this loads an object into your environment
 
 cpue_data <- d.export %>%
   filter(!is.na(cpue), cpue != 0,
-    as.numeric(as.character(year)) >= 2010,
+    as.numeric(as.character(year)) >= 2004,
     as.numeric(as.character(year)) <= 2024,
-    stock %in% c("SA 1")
+    stock %in% c("1")
   ) %>%
-  rename(area = stock, age = Age)
+  rename(Area = stock, Year = year)
 
 ###############################################################################
 ############### Apply EEZ and region classification to cpue_data ##############
@@ -52,39 +52,45 @@ latitude_threshold <- 54.5
 cpue_data$group <- NA
 
 # Points inside UK EEZ
-cpue_data$group[st_intersects(cpue_sf, uk_eez, sparse = FALSE)] <- "UK EEZ"
+cpue_data$group[st_intersects(cpue_sf, uk_eez, sparse = FALSE)] <- "Sub-Area 2"
 
 # Points outside but north
-cpue_data$group[st_coordinates(cpue_sf)[,2] >= latitude_threshold & !st_intersects(cpue_sf, uk_eez, sparse = FALSE)] <- "EU North"
+cpue_data$group[st_coordinates(cpue_sf)[,2] >= latitude_threshold & !st_intersects(cpue_sf, uk_eez, sparse = FALSE)] <- "Sub-Area 3"
 
 # Points outside but south
-cpue_data$group[st_coordinates(cpue_sf)[,2] < latitude_threshold & !st_intersects(cpue_sf, uk_eez, sparse = FALSE)] <- "EU South"
+cpue_data$group[st_coordinates(cpue_sf)[,2] < latitude_threshold & !st_intersects(cpue_sf, uk_eez, sparse = FALSE)] <- "Sub-Area 1"
 
 # Step 9: Merge with catch data and summarize by group
 cpue_by_year <- cpue_data %>%
-  group_by(year, group) %>%
+  group_by(Year, group, Age) %>%
   summarise(total_cpue = sum(cpue, na.rm = TRUE)) %>% 
-  mutate(year = as.numeric(as.character(year)))
+  mutate(year = as.numeric(as.character(Year)))
 
 # View the summary
-print(cpue_summary)
+print(cpue_by_year)
 
 setwd("C:/Users/chris/Desktop/DTU/R/ORIG/SMSR/PLOTS")
 
 # CHANGE THE ORDER OF THE AREAS IN THE DATAFRAME FOR PLOTTING WITH UK FIRST
 #I SET THIS UP SPECIFICALLY FOR PLOTTING THIS VGT AGAINST THE MODEL catch.save.age output
-#catch_by_year$group <- factor(catch_by_year$group,
-#levels = c("UK EEZ", "EU North", "EU South"))
+cpue_by_year$group <- factor(cpue_by_year$group,
+levels = c("Sub-Area 1", "Sub-Area 2", "Sub-Area 3"))
+
+cpue_by_year <- cpue_by_year %>%
+  mutate(
+    Year = as.numeric(as.character(Year)),
+    Age = as.numeric(as.character(Age))  # optional: standardize Age too
+  )
 
 # Step 10: Plot the total catches over time for the three groups
 p <- ggplot(cpue_by_year, aes(x = year, y = total_cpue, color = group)) +
-  geom_line(linewidth = 3) +  # Plot lines for each group
+  geom_line(linewidth = 2) +  # Plot lines for each group
   labs(title = "Total CPUE Over Time",
        x = "Year",
        y = "Total Catch",
        color = "Group") +
-  
-  scale_color_manual(values = c("UK EEZ" = "#35465A", "EU North" = "#CC3300", "EU South" = "#008000")) +  # Custom colors for groups
+  facet_grid(Age~group) +
+  scale_color_manual(values = c("Sub-Area 1" = "#35465A", "Sub-Area 2" = "#CC3300", "Sub-Area 3" = "#008000")) +  # Custom colors for groups
   # Use scale_y_continuous with label_number_si to format numbers in hundreds of thousands
   #scale_y_continuous(labels = label_number(scale = 1e-5, suffix = "T", accuracy = 1)) +
   # Adjust the x-axis to control the number of years shown
@@ -147,7 +153,7 @@ names(pol_df)[3] <- c("BankID")
 ###########################################################
 
 dogger <- st_read('DATA/SHAPEFILES/DOGGER 2019/Natura2000_end2019_shp/Natura2000_end2019_epsg3035.shp', ) %>% 
-  filter(SITECODE %in% c('DE1003301', 'UK0030352', 'NL2008001'))
+  filter(SITECODE %in% c('UK0030352'))
 
 ###########################################################
 ################### READ IN ICES SQAURES ##################
@@ -199,7 +205,7 @@ cropped_eez <- st_crop(eez, xmin = -3, xmax = 11, ymin = 51, ymax = 59)
 cropped_country_boarders <- st_crop(country_boarders, xmin = -3, xmax = 11, ymin = 51, ymax = 59)
 cropped_ices_rec <- st_crop(ices_rec, xmin = -3, xmax = 11, ymin = 51, ymax = 59)
 pol_df_cropped <- pol_df %>% filter(x >= -3 & x <= 11, y >= 51 & y <= 59)
-cpue_data_cropped <- cpue_data %>% filter(lon >= -3 & lon <= 11 & lat >= 51 & lat <= 59)
+cpue_data_cropped <- cpue_data %>% filter(long >= -3 & long <= 11 & lat >= 51 & lat <= 59)
 
 ###############################################
 ################## MAPS END ###################
@@ -217,9 +223,9 @@ labels_df <- data.frame(
 #SUM cpue_data FOR PLOTTING
 
 catch_by_year <- cpue_data %>%
-  filter(area == "1r") %>%  # Filter for area "1r" only
-  group_by(Year, group, lat, lon) %>%
-  summarise(total_catch = sum(vgt/1000, na.rm = TRUE)) %>%
+  filter(Area == "1") %>%  # Filter for area "1r" only
+  group_by(Year, group, lat, long) %>%
+  summarise(total_catch = sum(cpue, na.rm = TRUE)) %>%
   ungroup() %>%
   mutate(total_catch = round(total_catch, 0)) %>%  # Round to 1 decimal place
   filter(total_catch >= 1)  # Remove values smaller than 1
@@ -227,7 +233,7 @@ catch_by_year <- cpue_data %>%
 
 # CHANGE THE ORDER OF THE AREAS IN THE DATAFRAME FOR PLOTTING WITH UK FIRST
 catch_by_year$group <- factor(catch_by_year$group,
-                              levels = c("UK EEZ", "EU North", "EU South"))
+                              levels = c("Sub-Area 2", "Sub-Area 3", "Sub-Area 1"))
 
 setwd("C:/Users/chris/Desktop/DTU/R/ORIG/SMSR/PLOTS")
 
@@ -245,12 +251,12 @@ p <- ggplot() +
   
   # Plot center of gravity points for each year and area
   #geom_point(data = catch_by_year, aes(x = lon, y = lat, color = group, size = total_catch), alpha = 0.4) +  # Plot catch points with size based on total catch
-  geom_point(data = catch_by_year, aes(x = lon, y = lat, color = group, size = total_catch), 
+  geom_point(data = catch_by_year, aes(x = long, y = lat, color = group, size = total_catch), 
              position = position_jitter(width = 0.1, height = 0.1), alpha = 0.6) +
   #geom_density_2d(data = catch_by_year, aes(x = lon, y = lat), color = "black", size = 0.3) +
   #geom_point(data = catch_by_year, aes(x = lon, y = lat, color = group, size = total_catch, shape = factor(Year))) +
   
-  #scale_color_manual(values = c("UK EEZ" = "#f8766d", "EU North" = "#00ba38", "EU South" = "#619cff")) + # Custom colors for groups
+  scale_color_manual(values = c("Sub-Area 1" = "#35465A", "Sub-Area 2" = "#CC3300", "Sub-Area 3" = "#008000")) +
   labs(title = "Sandeel Sub-Areas in SA 1 (2010-2024)",
        x = "Longitude",
        y = "Latitude",

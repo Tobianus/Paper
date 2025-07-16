@@ -58,3 +58,25 @@ relative_catch_df <- data.frame(
 
 # Save to CSV
 write.csv(relative_catch_df, "custom_F_data.csv", row.names = FALSE)
+
+##################################################################################
+####################### LAST 5 YEARS AVERAGE RELATIVE DIST #######################
+##################################################################################
+
+# Identify the last 5 years
+last_5_years <- tail(colnames(relative.catch), 5)
+
+# Extract proportions for those years
+relative_catch_last5 <- relative.catch[, last_5_years]
+
+# Calculate the average proportion per group across the last 5 years
+average_last5 <- rowMeans(relative_catch_last5)
+
+# Create a summary dataframe
+average_distribution_last5 <- data.frame(
+  group = rownames(relative.catch),
+  average_proportion = average_last5
+)
+
+# Display the result
+print(average_distribution_last5)
