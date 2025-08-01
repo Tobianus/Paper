@@ -33,20 +33,17 @@ migration_matrix <- matrix(c(
         0.30,     0.12,    0.14  # From 3 -----> EU NORTH
 ), nrow = 3, byrow = TRUE)
 
-setwd("C:/Users/chris/Desktop/GIT/Paper/scripts/analysis/")
+#@setwd("C:/Users/chris/Desktop/GIT/Paper/scripts/analysis/")
 
 source("OM_areas_CPUE.R")
 #source(here("scripts/analysis", "F_distribution.R"))
 
-setwd("C:/Users/chris/Desktop/GIT/Paper/scripts/functions/")
+source("../functions/get_OM_parameters_move.R")
+source("../functions/run_agebased_sms_OP_move.R")
+source("../functions/addYear.R")
 
-source("get_OM_parameters_move.R")
-source("run_agebased_sms_OP_move.R")
-source("addYear.R")
-
-setwd("C:/Users/chris/Desktop/GIT/Paper/scripts/data/sandeel 1r")
 # Read parameters from stock assessment
-parms <- readRDS("area1r.rds")
+parms <- readRDS("../data/sandeel 1r/area1r.rds")
 #parms <- readRDS(here("scripts/data/sandeel 1r", "sandeel_1r_parms.rds"))
 
 sas <- parms[[2]]
@@ -55,9 +52,9 @@ df.OM <- get_OM_parameters(df.tmb, sas,
                            nspace = 3,
                            rec.space = c(0.12, 0.46, 0.14),
                            #moverecruit = c(0.1,0.7,0.2),
-                           migration_matrix = migration_matrix)
-                           #movemax = c(0.1,0.2,0.1) # Movement between areas
-
+                           migration_matrix = migration_matrix,
+                           movemax = c(0.1,0.1,0.1) # Movement between areas
+)
 #df.OM$recruitment.fit <- list(mod1,mod2,mod3)
 
 x <- run.agebased.sms.op(df.OM)

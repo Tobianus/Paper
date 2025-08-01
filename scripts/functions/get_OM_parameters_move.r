@@ -77,10 +77,10 @@ get_OM_parameters <- function(df.tmb,
     if (!is.null(migration_matrix)) {
       # Expand the static matrix across all age/year/season dimensions
       for (yr in 1:df.tmb$nyear) {
-        for (season in 1:df.tmb$nseason) {
+        for (season in 2) {
           for (from in 1:nspace) {
             for (to in 1:nspace) {
-              movemat[, yr, from, season] <- migration_matrix[to, from]
+              movemat[1, yr, from, season] <- migration_matrix[to, from]
             }
           }
         }
