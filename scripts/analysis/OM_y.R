@@ -11,56 +11,77 @@ library(ggplot2)
 library(gridExtra)
 library(grid)
 library(scales)
-
-#install_github('nissandjac/smsR') - INSTALL UPDATES
+library(ggtext)
 
 #Using the new area selection script 'Coords_areas_catches_area1.R', We have now assigned a new F in the OM which calculates 
 #the relative distribution of catches from 2010 to 2024. We then need to run the script 'F_NIS gives' which outputs
 #'relative.catch'. Relative catch is then fed into 'R/get_OM_parameters_NIS_fix.R' when the model is run.
 
-#migration_matrix <- matrix(c(
-#To:  EU SOUTH - UK - EU NORTH
-#      0.03,     0.0,     0.18, # From 1 -----> EU SOUTH
-#      0.0,      0.41,    0.14, # From 2 -----> UK
-#      0.0,      0.02,    0.14  # From 3 -----> EU NORTH
-#), nrow = 3, byrow = TRUE)
+#source(here("scripts/analysis", "OM_areas.R"))
+#source(here("scripts/analysis", "F_distribution.R"))
+#install_github("nissandjac/smsR")
+
+source('R/matrices.R') # Normalized retention values
+
+#NORMALISE THE NUMBERS SO THEY ADD UP TO 1. WE DO 
+#THIS BECAUSE IF THIS DOES NOT ADD UP TO 1, WE ARE
+#LOSING FISH FROM HOW THE RECRUITMENT IS FED INTO THE MODEL.
+#source('R/retention.R')# Normalized retention values
+
+# Pick which migration matrix to use
+migration_matrix <- zero_migration_matrix
+# migration_matrix <- ten_2_1_migration_matrix
+# migration_matrix <- fourty_2_1_migration_matrix
+# migration_matrix <- ten_2_3_migration_matrix
+# migration_matrix <- fourty_2_3_migration_matrix
+#migration_matrix <- asbjorne_migration_matrix
+
+############ ADD OUTPUT TO rec.space AND THEN RUN MODEL
+
+areas <- c("EU SOUTH","UK","EU NORTH")
 
 migration_matrix <- matrix(c(
-  #To:EU SOUTH - UK - EU NORTH
-  0.0745, 0.0000,   0.2134, # From 1 -----> EU SOUTH
-  0.0000, 0.4150,   0.1484, # From 2 -----> UK
-  0.0000, 0.0187,   0.1469),# From 3 -----> EU NORTH
-  nrow = 3, byrow = TRUE)
+  # ----- ROW 1: TO EU SOUTH -----
+  0.0,  # from EU SOUTH → to EU SOUTH   (stay; keep 0 for "leavers-only")
+  0.01,  # from UK       → to EU SOUTH
+  0.0,  # from EU NORTH → to EU SOUTH
+  
+  # ----- ROW 2: TO UK -----
+  0.0,  # from EU SOUTH → to UK
+  0.0,  # from UK       → to UK        (stay; keep 0 for "leavers-only")
+  0.0,  # from EU NORTH → to UK
+  
+  # ----- ROW 3: TO EU NORTH -----
+  0.0,  # from EU SOUTH → to EU NORTH
+  0.20,  # from UK       → to EU NORTH
+  0.0   # from EU NORTH → to EU NORTH  (stay; keep 0 for "leavers-only")
+), nrow = 3, byrow = TRUE,
+dimnames = list(to = areas, from = areas))
 
-setwd("C:/Users/chris/Desktop/GIT/Paper/scripts/")
+setwd("C:/Users/chris/Desktop/LATEST MODEL")
+source('R/get_OM_parameters_move_y.R')
+source('R/run_agebased_sms_OP_move_y.R')
+source('R/addYear.R')
 
-#source('analysis/OM_areas_CPUE.R')
-#source(here("scripts/analysis", "F_distribution.R"))
-
-setwd("C:/Users/chris/Desktop/GIT/Paper/scripts/functions/")
-source('get_OM_parameters_move.R')
-source('run_agebased_sms_OP_move.R')
-source('addYear.R')
-
-setwd("C:/Users/chris/Desktop/GIT/Paper/scripts/")
 # Read parameters from stock assessment
-parms <- readRDS('data/sandeel 1r/area1r.rds')
+parms <- readRDS('DATA/sandeel 1r/area1r.rds')
 #parms <- readRDS(here("scripts/data/sandeel 1r", "sandeel_1r_parms.rds"))
 
 sas <- parms[[2]]
 df.tmb <- parms[[1]]
 df.OM <- get_OM_parameters(df.tmb, sas,
                            nspace = 3,
-                           rec.space = c(0.12, 0.46, 0.14),
+                           rec.space = c(0.12, 0.65, 0.12),
+                           #rec.space = c(0.33,0.33,0.33),
                            #moverecruit = c(0.1,0.7,0.2),
-                           migration_matrix = migration_matrix)
-                           #movemax = c(0.1,0.2,0.1) # Movement between areas
-
+                           migration_matrix = migration_matrix,
+                           movemax = c(0.1,0.1,0.1) # Max movement from 1+ groups
+)
 #df.OM$recruitment.fit <- list(mod1,mod2,mod3)
 
 x <- run.agebased.sms.op(df.OM)
 
-################# PLOT START ##################
+
 SSB <- as.data.frame(x$SSB) %>%
   mutate(years = df.OM$years) %>%
   pivot_longer(1:df.OM$nspace, values_to = 'SSB', names_to = 'area')
@@ -77,16 +98,52 @@ p <- ggplot(SSB, aes(x = years, y = SSB,color = area)) +
     x = "Year", 
     y = "Total SSB"
   ) +
-  scale_colour_manual(name = "area", 
-  labels = c("Sub-Area 1", "Sub-Area 2", "Sub-Area 3"), 
-  values = c("#619cff", "#f8766d", "#00ba38"))
+  scale_colour_manual(name = "area", labels = c("Sub-Area 1", "Sub-Area 2", "Sub-Area 3"), values = c("#619cff", "#f8766d", "#00ba38"))
 ggsave("  0.9   # from EU NORTH → to EU NORTH.png", plot = p, dpi = 300, width = 12, height = 8)
-################# PLOT END ##################
 
 
 str(df.OM)
 
+####################################################################
+########################### CPUE START #############################
+####################################################################
+
+Nsave <- as.data.frame.table(x$N.save.age, responseName = 'N') %>% 
+  filter(!is.na(N), N != 0,
+         as.numeric(as.character(year)) >= 2010,
+         as.numeric(as.character(year)) <= 2024,
+         age %in% 0:2,
+         season == 2) %>% 
+  mutate(
+    Year = as.numeric(as.character(year)),
+    Age = as.numeric(as.character(age)),
+    Group = space
+  ) %>%
+  select(-year, -age, -space)
+
+# Map space to group labels (like cpue_by_year$groups)
+Nsave_filtered <- Nsave %>%
+  mutate(Group = case_when(
+    Group == 1 ~ "Sub-Area 1",
+    Group == 2 ~ "Sub-Area 2",
+    Group == 3 ~ "Sub-Area 3"
+  ))
+
+# Round the N values, remove small ones, keep spatial info
+nage_by_agegroup <- Nsave_filtered %>%
+  group_by(Group, Age, Year) %>%   # ✅ keep age, drop year
+  summarise(total_cpue = sum(N, na.rm = TRUE)) %>%
+  ungroup() %>%
+  mutate(std_N = total_cpue / mean(total_cpue))
+
+# Factor levels for consistent plotting order
+nage_by_agegroup$Group <- factor(nage_by_agegroup$Group,
+                                 levels = c("Sub-Area 1", "Sub-Area 2", "Sub-Area 3"))
+
+####################################################################
 #########################  CATCH START #############################
+####################################################################
+
 # Step 1: Filter for season 1 (4th dimension)
 catch_season1 <- x$Catch.save.age[,,, "1"]
 # Step 2: Sum over the age dimension (1st dimension)
@@ -109,28 +166,28 @@ catch_df$space <- as.numeric(as.character(catch_df$space))
 catch_df_filtered <- catch_df %>%
   filter(Year >= 2010) %>% 
   mutate(group = case_when(
-    #space == 1 ~ "UK EEZ",
-    #space == 2 ~ "EU North",
-    #space == 3 ~ "EU South",
     space == 1 ~ "Sub-Area 1",
     space == 2 ~ "Sub-Area 2",
     space == 3 ~ "Sub-Area 3",
     TRUE ~ as.character(space)
   )) %>%
+  mutate(std_C = total_catch / mean(total_catch)) %>% 
   select(-space) %>% 
-  select(Year, group, total_catch)
+  select(Year, group, total_catch, std_C)
 
 # CHANGE THE ORDER OF THE AREAS IN THE DATAFRAME FOR PLOTTING WITH UK FIRST
 catch_df_filtered$group <- factor(catch_df_filtered$group,
-                                  #levels = c("UK EEZ", "EU North", "EU South"))
                                   levels = c("Sub-Area 1", "Sub-Area 2", "Sub-Area 3"))
 
+#############################################
+################ PLOT CATCH #################
+#############################################
 
 setwd("C:/Users/chris/Desktop/DTU/R/ORIG/SMSR/PLOTS")
 # Step 6: Create the plot with ggplot2 and custom colors
 p <- ggplot(catch_df_filtered, aes(x = Year, y = total_catch, color = group)) +
-  geom_line(linewidth = 3) +  # Plot lines for each space (area)
-  #geom_point(aes(shape = group), size = 3) +  # Add points with shapes for legend
+  geom_line(size = 1) +  # Plot lines for each space (area)
+  geom_point(aes(shape = group), size = 3) +  # Add points with shapes for legend
   labs(
     title = "Total Catches Over Time (Season 1, from 2010 onwards)", 
     x = "Year", 
@@ -139,19 +196,18 @@ p <- ggplot(catch_df_filtered, aes(x = Year, y = total_catch, color = group)) +
     shape = "Area"  # Include shape legend for customization
   ) +
   theme(legend.position = "bottom") +  # Move the legend to the bottom
-  scale_x_continuous(breaks = seq(2010, 2024, by = 1)) +  # Shows every 2 years from 2010 to 2024
-  
-  scale_color_manual(values = c("Sub-Area 1" = "#619cff", "Sub-Area 2" = "#f8766d", "Sub-Area 3" = "#00ba38")) + # Color for each area
-  #scale_shape_manual(values = c("EU South" = 16, "UK EEZ" = 16, "EU North" = 16)) +  # Custom shapes
+  scale_x_continuous(breaks = seq(2010, 2024, by = 2)) +  # Shows every 2 years from 2010 to 2024
+  scale_color_manual(values = c("Sub-Area 1" = "#35465A", "Sub-Area 2" = "#CC3300", "Sub-Area 3" = "#008000")) + # Color for each area
+  scale_shape_manual(values = c("Sub-Area 1" = 16, "Sub-Area 2" = 16, "Sub-Area 3" = 16)) +  # Custom shapes
   theme(
-    plot.title = element_text(size = 12, face = "bold"),
-    axis.title = element_text(size = 12),
-    axis.text = element_text(size = 12),
-    legend.title = element_text(size = 12),
-    legend.text = element_text(size = 12),
+    plot.title = element_text(size = 11, face = "bold"),
+    axis.title = element_text(size = 11),
+    axis.text = element_text(size = 11),
+    legend.title = element_text(size = 11),
+    legend.text = element_text(size = 11),
     legend.position = "bottom",                # Move the legend to the bottom
     legend.direction = "horizontal",           # Make the legend items display in a horizontal line
-    strip.text = element_text(size = 12),
+    strip.text = element_text(size = 11),
     panel.background = element_rect(fill = "#F0F2F2"),
     plot.background = element_rect(fill = "white")
   ) +
@@ -165,17 +221,10 @@ SSB <- as.data.frame(x$SSB) %>%
   pivot_longer(1:df.OM$nspace, values_to = 'SSB', names_to = 'area')
 
 #dev.copy(png,'D:/Aquatic Engineering 2021/THESIS/Model/SSB/SSB.png', width=5000, height=3000, res=300)
-ggplot(SSB, aes(x = years, y = SSB,color = area))+
-  geom_line(linewidth=2)+
-  theme_classic()+
-  scale_x_continuous(breaks = seq(1983, 2024, by = 1))+
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))+
-  scale_color_manual(values = c("1" = "#35465A", "2" = "#CC3300", "3" = "#008000")) 
+ggplot(SSB, aes(x = years, y = SSB,color = area))+geom_line()+theme_classic()
 #dev.off()
 
 SSB.tot <- SSB %>% group_by(years) %>% summarise(SSBtot = sum(SSB))
-
-ggplot(SSB.tot, aes(x = years, y = SSBtot))+geom_line()+theme_classic()
 
 ssb.asses <- getSSB(df.tmb, sas)
 r.assess <- getR(df.tmb, sas)
@@ -190,32 +239,13 @@ plot(SSB.tot$SSBtot/ssb.asses$SSB[1:df.tmb$nyears])
 ###################################################
 ################### SUM SQUARED ###################
 ###################################################
+#SSQ = sum((N_obs - N_modeled)^2)
+#SSQ = sum((log(N_obs) - log(N_modeled))^2)
+#residual = N_obs - N_modeled
 
-# Rename the total_catch columns ahead of time
-obs_df <- catch_by_year_noscale %>%
-  select(Year, group, Observed = total_catch)
-
-mod_df <- catch_df_filtered_noscale %>%
-  select(Year, group, Modeled = total_catch)
-
-# Merge by Year and group
-residuals_df <- full_join(obs_df, mod_df, by = c("Year", "group"))
-
-residuals_df <- residuals_df %>%
-  mutate(
-    residual = Observed - Modeled,
-    log_residual = log(Observed) - log(Modeled),
-    ssq = residual^2,
-    ssq_log = log_residual^2
-  )
-
-# Sum of Squares
-total_ssq <- sum(residuals_df$ssq, na.rm = TRUE)
-total_ssq_log <- sum(residuals_df$ssq_log, na.rm = TRUE)
-
-cat("Total SSQ:", total_ssq, "\n")
-cat("Total log-SSQ:", total_ssq_log, "\n")
-
+SSQ = sum((allmeans_cpue - allmeans_nage)^2)
+SSQ = sum((log(allmeans_cpue$std_cpue) - log(allmeans_nage$std_cpue))^2)
+residual = allmeans_cpue - allmeans_nage
 
 ###################################################
 ###################### RICKER #####################
@@ -241,15 +271,20 @@ mod3
 
 df.new <- addYear(df.OM,
                   new_years = 10, # Number of years to simulate into the future
-                  F_future = c(0, 0.33, 0.33)
+                  #F_future = c(0.33, 0.33, 0.33) ### ADVICE
                   ### FROM LATEST ADVICE
-                  #F_future = c(0, 0, 0.33)
+                  #F_future = c(0.33, 0, 0.33) ### ADVICE BREXIT
                   ### FROM LATEST ADVICE ###Should be 0.36, 036, 0.00 but we drop uk bc 0 F
-                  #F_future = c(0.001, 0, 0.99)
+                  #F_future = c(0, 0.33, 0) ### ONLY UK
+                  ### RELATIVE PROPORTION LAST 5 YEARS FROM 2024 VGT ### Should be 0.56, 044, 0.00 but we drop uk bc 0 F
+                  
+                  #F_future = c(0.0, 0.0, 0.0) ### NATURAL PUFFIN
                   ### YEAR 2024 VGT ONLY ### 0.56, 044, 0.00 but we drop uk bc 0 F
-                  #F_future = c(0, 0.56, 0.44) 
+                  
+                  #F_future = c(0.85, 0.85, 0.85) ### VULNERABLE PUFFIN
                   ### BEFORE BREXIT RELATIVE PROPORTION LAST 5 YEARS FROM 2024 VGT
-                  #F_future = c(0, 0, 0.44)
+                  
+                  F_future = c(0.33, 0, 0.33) ### SUSTAINABLE PUFFIN
                   ### RELATIVE PROPORTION LAST 5 YEARS FROM 2024 VGT ### Should be 0.56, 044, 0.00 but we drop uk bc 0 F
                   
 )
@@ -257,20 +292,17 @@ df.new <- addYear(df.OM,
 #ADD A AND B TO df.new for RICKER MODEL
 df.new$mod <- list(mod1, mod2, mod3)
 
-x <- run.agebased.sms.op(df.new)
-
-# Find the most recent year
-most_recent_year <- max(df.new$years)
+x <- run.agebased.sms.OP(df.new)
 
 SSB <- as.data.frame(x$SSB) %>%
   mutate(years = df.new$years) %>%
-  pivot_longer(1:df.new$nspace, values_to = 'SSB', names_to = 'area') %>%
-  filter(years >= 2010 & years <= most_recent_year)
+  filter(years >= 2010) %>%
+  pivot_longer(1:df.new$nspace, values_to = 'SSB', names_to = 'area')
 
 R.save <- as.data.frame(x$R.save) %>%
   mutate(years = df.new$years) %>%
-  pivot_longer(1:df.new$nspace, values_to = 'R.save', names_to = 'area') %>%
-  filter(years >= 2010 & years <= most_recent_year)
+  filter(years >= 2010) %>%
+  pivot_longer(1:df.new$nspace, values_to = 'R.save', names_to = 'area')
 
 ######################################################
 ################## INDIVIDUAL PLOTS ##################
@@ -281,24 +313,22 @@ R.save <- as.data.frame(x$R.save) %>%
 ######################################################
 #dev.copy(png,'C:/Users/chris/Desktop/DTU/R/ORIG/SMSR/PLOTS/0.36-0.36-0/SSB P.AREA - 0.36, 0.36, 0.png', width=5000, height=3000, res=300)
 #dev.copy(png,'C:/Users/chris/Desktop/DTU/R/ORIG/SMSR/PLOTS/0-0.36-0/SSB P.AREA - 0, 0.36, 0.png', width=5000, height=3000, res=300)
-#ev.copy(png,'C:/Users/chris/Desktop/DTU/R/ORIG/SMSR/PLOTS/0-0.99-0.001/SSB P.AREA - 0, 0.99, 0.001.png', width=5000, height=3000, res=300)
+#dev.copy(png,'C:/Users/chris/Desktop/DTU/R/ORIG/SMSR/PLOTS/0-0.99-0.001/SSB P.AREA - 0, 0.99, 0.001.png', width=5000, height=3000, res=300)
 #dev.copy(png,'C:/Users/chris/Desktop/DTU/R/ORIG/SMSR/PLOTS/0-0.44-0/SSB P.AREA - 0, 0.44, 0.png', width=5000, height=3000, res=300)
 
-
-ggplot(SSB, aes(x = years, y = SSB, color = area)) +
+ggplot(SSB, aes(x = years, y = SSB/1000, color = area)) +
   theme_bw() +
   geom_line(linewidth=1.5) + #change to 1.7 for individual plot
   geom_point(size=3.5) + #change to 4 for individual plot
-  geom_vline(aes(xintercept = 2025)) +
-  labs(title = "SSB 2025-2035 YEARS", y = "SSB (Tonnes)", x = "Years") +
+  geom_vline(aes(xintercept = 2024), linetype = "dashed") +
+  labs(title = "SSB 2023-2032 YEARS", y = "SSB (Thousand Tonnes)", x = "Years") +
   scale_x_continuous(breaks = seq(min(df.new$years), max(df.new$years), by = 3)) +
   theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
   theme(axis.text.y = element_text(angle = 45, hjust = 1)) +
-  scale_colour_manual(labels = c("EU S EEZ", "UK EEZ", "EU N EEZ"), values = c("#619cff", "#f8766d", "#00ba38")) +
+  scale_colour_manual(labels = c("Sub-Area 1", "Sub-Area 2", "Sub-Area 3"), values = c("#619cff", "#f8766d", "#00ba38")) +
   scale_y_continuous(labels = label_comma()) +
   theme(text = element_text(size = 20)) + #change to 20 for individual plot
-  theme(legend.position = c(0.08, 0.86), legend.title=element_blank()) + #Use 0.93, 0.88 for individual plot
-  #theme(legend.position = "bottom") +
+  theme(legend.position = c(0.93, 0.86), legend.title=element_blank()) + #Use 0.93, 0.88 for individual plot
   theme(legend.box.background = element_rect(color="black", linewidth=0.3), legend.box.margin = margin(1, 1, 1, 1)) +
   theme(legend.key.size = unit(1, 'cm'))
 
@@ -310,26 +340,24 @@ ggplot(SSB, aes(x = years, y = SSB, color = area)) +
 
 #SUMMING THE 3 AREAS FOR BLIM COMPARISON
 
-SSBsum <- SSB %>% 
-  group_by(years) %>% 
-  summarise(SSBtot = sum(SSB)) %>%  
-  mutate(Area = 'SA1') 
+SSBsum <- SSB %>% group_by(years) %>% summarise(SSBtot = sum(SSB)) %>%  
+  mutate(Area = 'SA1')
 
 #dev.copy(png,'C:/Users/chris/Desktop/DTU/R/ORIG/SMSR/PLOTS/0.36-0.36-0/SSB SUM - 0.36, 0.36, 0.png', width=5000, height=3000, res=300)
 #dev.copy(png,'C:/Users/chris/Desktop/DTU/R/ORIG/SMSR/PLOTS/0-0.36-0/SSB SUM - 0, 0.36, 0.png', width=5000, height=3000, res=300)
 #dev.copy(png,'C:/Users/chris/Desktop/DTU/R/ORIG/SMSR/PLOTS/0-0.99-0.001/SSB SUM - 0, 0.99, 0.001.png', width=5000, height=3000, res=300)
 #dev.copy(png,'C:/Users/chris/Desktop/DTU/R/ORIG/SMSR/PLOTS/0-0.44-0/SSB SUM - 0, 0.44, 0.png', width=5000, height=3000, res=300)
 
-ggplot(data = SSBsum, aes(x = years, y = SSBtot, fill = Area)) +
+ggplot(data = SSBsum, aes(x = years, y = SSBtot/1000, fill = Area)) +
   geom_line(color = "#008822", linewidth=1.5) + 
   geom_point(color = "#008822", size=3.5) +
   theme_bw() +
-  geom_vline(aes(xintercept = 2025)) +
-  labs(title = "SSB (SUM) 2025-2035 YEARS", y = "SSB (Tonnes)", x = "Years") +
-  geom_hline(yintercept=140824, linetype=3, linewidth=1, color = "black") +
-  annotate("text", x = 2040, y = 150000, label = "B-escapement", size = 4, color = "black") +
-  geom_hline(yintercept=105809, linetype=3, linewidth=1, color = "red") +
-  annotate("text", x = 2041.5, y = 120000, label = "Blim", size = 4, color = "red") +
+  geom_vline(aes(xintercept = 2024), linetype = "dashed") +
+  labs(title = "SSB (SUM) 2023-2032 YEARS", y = "SSB (Thousand Tonnes)", x = "Years") +
+  geom_hline(yintercept=140824/1000, linetype=3, linewidth=1, color = "black") +
+  annotate("text", x = 2032.3, y = 150000/1000, label = "B-escapement", size = 4, color = "black") +
+  geom_hline(yintercept=105809/1000, linetype=3, linewidth=1, color = "red") +
+  annotate("text", x = 2033.6, y = 120000/1000, label = "Blim", size = 4, color = "red") +
   scale_x_continuous(breaks = seq(min(SSBsum$years), max(SSBsum$years), by = 3)) +
   theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
   theme(axis.text.y = element_text(angle = 45, hjust = 1)) +
@@ -355,12 +383,12 @@ ggplot(R.save, aes(x = years, y = R.save/1000000, color = area)) +
   theme_bw() +
   geom_line(linewidth=1.5) +
   geom_point(size=3.5) +
-  geom_vline(aes(xintercept = 2025)) +
-  labs(title = "Recruitment 2025-2035 YEARS", y = "SSB (Tonnes)", x = "Years") +
+  geom_vline(aes(xintercept = 2024), linetype = "dashed") +
+  labs(title = "R (P/AREA) 2023-2032 YEARS", y = "Recruitment (Million Tonnes)", x = "Years") +
   scale_x_continuous(breaks = seq(min(df.new$years), max(df.new$years), by = 3)) +
   theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
   theme(axis.text.y = element_text(angle = 45, hjust = 1)) +
-  scale_colour_manual(labels = c("EU S EEZ", "UK EEZ", "EU N EEZ"), values = c("#619cff", "#f8766d", "#00ba38")) +
+  scale_colour_manual(name = "Area", labels = c("Sub-Area 1", "Sub-Area 2", "Sub-Area 3"), values = c("#619cff", "#f8766d", "#00ba38")) +
   scale_y_continuous(labels = label_comma()) +
   theme(text = element_text(size = 20)) +
   theme(legend.position = c(0.93, 0.86), legend.title=element_blank()) +
@@ -373,9 +401,7 @@ ggplot(R.save, aes(x = years, y = R.save/1000000, color = area)) +
 ###################### R SUM #######################
 ####################################################
 
-R.savesum <- R.save %>% 
-  group_by(years) %>% 
-  summarise(R.savetot = sum(R.save)) %>%  
+R.savesum <- R.save %>% group_by(years) %>% summarise(R.savetot = sum(R.save/1000000)) %>%  
   mutate(Area = 'SA1')
 
 #dev.copy(png,'C:/Users/chris/Desktop/DTU/R/ORIG/SMSR/PLOTS/0.36-0.36-0/R SUM - 0.36, 0.36, 0.png', width=5000, height=3000, res=300)
@@ -387,8 +413,8 @@ ggplot(data = R.savesum, aes(x = years, y = R.savetot, fill = Area)) +
   geom_line(color = "#008822", linewidth=1.5) + 
   geom_point(color = "#008822", size=3.5) +
   theme_bw() +
-  geom_vline(aes(xintercept = 2025)) +
-  labs(title = "R (SUM) 2025-2035 YEARS", y = "Recruitment (Millions)", x = "Years") +
+  geom_vline(aes(xintercept = 2024), linetype = "dashed") +
+  labs(title = "R (SUM) 2023-2032 YEARS", y = "Recruitment (Million Tonnes)", x = "Years") +
   scale_x_continuous(breaks = seq(min(R.savesum$years), max(R.savesum$years), by = 3)) +
   theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
   theme(axis.text.y = element_text(angle = 45, hjust = 1)) +
@@ -408,26 +434,26 @@ ggplot(data = R.savesum, aes(x = years, y = R.savetot, fill = Area)) +
 Catch <- as.data.frame.table(x$Catch.save.age, responseName = 'Catch') %>% 
   group_by(year, space) %>%
   summarise(Ctot = sum(Catch)) %>% 
-  mutate(year = as.numeric(as.character(year))) %>%
-  filter(year >= 2010 & year <= most_recent_year)
+  mutate(year = as.numeric(as.character(year))) %>% 
+  filter(year >= 2010)
 
 #dev.copy(png,'C:/Users/chris/Desktop/DTU/R/ORIG/SMSR/PLOTS/0.36-0.36-0/CATCH P.AREA - 0.36, 0.36, 0.png', width=5000, height=3000, res=300)
 #dev.copy(png,'C:/Users/chris/Desktop/DTU/R/ORIG/SMSR/PLOTS/0-0.36-0/CATCH P.AREA - 0, 0.36, 0.png', width=5000, height=3000, res=300)
 #dev.copy(png,'C:/Users/chris/Desktop/DTU/R/ORIG/SMSR/PLOTS/0-0.99-0.001/CATCH P.AREA - 0, 0.99, 0.001.png', width=5000, height=3000, res=300)
 #dev.copy(png,'C:/Users/chris/Desktop/DTU/R/ORIG/SMSR/PLOTS/0-0.44-0/CATCH P.AREA - 0, 0.44, 0.png', width=5000, height=3000, res=300)
 
-ggplot(Catch,aes(x = year, y= Ctot, color = space)) +
+ggplot(Catch,aes(x = year, y= Ctot/1000, color = space)) +
   theme_bw() +
   geom_line(linewidth=1.5) +
   geom_point(size=3.5) +
-  geom_vline(aes(xintercept = 2025)) +
-  labs(title = "CATCH (P/AREA) 2025-2035 YEARS", y = "Catch (Tonnes)", x = "Years") +
+  geom_vline(aes(xintercept = 2024), linetype = "dashed") +
+  labs(title = "CATCH (P/AREA) 2023-2032 YEARS", y = "Catch (Thousand Tonnes)", x = "Years") +
   scale_x_continuous(breaks = seq(min(df.new$years), max(df.new$years), by = 3)) +
   theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
   theme(axis.text.y = element_text(angle = 45, hjust = 1)) +
   scale_y_continuous(labels = label_comma()) +
   theme(text = element_text(size = 20)) +
-  scale_colour_manual(labels = c("EU S EEZ", "UK EEZ", "EU N EEZ"), values = c("#619cff", "#f8766d", "#00ba38")) +
+  scale_colour_manual(name = "Area", labels = c("Sub-Area 1", "Sub-Area 2", "Sub-Area 3"), values = c("#619cff", "#f8766d", "#00ba38")) +
   theme(legend.position = c(0.93, 0.86), legend.title=element_blank()) +
   theme(legend.box.background = element_rect(color="black", size=0.3), legend.box.margin = margin(1, 1, 1, 1)) +
   theme(legend.key.size = unit(1, 'cm')) 
@@ -438,10 +464,7 @@ ggplot(Catch,aes(x = year, y= Ctot, color = space)) +
 ################# CATCH SUM #################
 #############################################
 
-
-CSUM <- Catch %>% 
-  group_by(year) %>% 
-  summarise(Ctot = sum(Ctot)) %>%  
+CSUM <- Catch %>% group_by(year) %>% summarise(Ctot = sum(Ctot)) %>%  
   mutate(Area = 'SA1')
 
 #dev.copy(png,'C:/Users/chris/Desktop/DTU/R/ORIG/SMSR/PLOTS/0.36-0.36-0/CATCH SUM - 0.36, 0.36, 0.png', width=5000, height=3000, res=300)
@@ -449,12 +472,12 @@ CSUM <- Catch %>%
 #dev.copy(png,'C:/Users/chris/Desktop/DTU/R/ORIG/SMSR/PLOTS/0-0.99-0.001/CATCH SUM - 0, 0.99, 0.001.png', width=5000, height=3000, res=300)
 #dev.copy(png,'C:/Users/chris/Desktop/DTU/R/ORIG/SMSR/PLOTS/0-0.44-0/CATCH SUM - 0, 0.44, 0.png', width=5000, height=3000, res=300)
 
-ggplot(data = CSUM, aes(x = year, y = Ctot, fill = Area)) +
+ggplot(data = CSUM, aes(x = year, y = Ctot/1000, fill = Area)) +
   geom_line(color = "#008822", linewidth=1.5) + 
   geom_point(color = "#008822", size=3.5) +
   theme_bw() +
-  geom_vline(aes(xintercept = 2025)) +
-  labs(title = "CATCH (SUM) 2025-2035 YEARS", y = "Catch (Tonnes)", x = "Years") +
+  geom_vline(aes(xintercept = 2024), linetype = "dashed") +
+  labs(title = "CATCH (SUM) 2023-2032 YEARS", y = "Catch (Thousand Tonnes)", x = "Years") +
   scale_x_continuous(breaks = seq(min(CSUM$year), max(CSUM$year), by = 3)) +
   theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
   theme(axis.text.y = element_text(angle = 45, hjust = 1)) +
@@ -474,32 +497,55 @@ ggplot(data = CSUM, aes(x = year, y = Ctot, fill = Area)) +
 
 #FIX FOR F IS USING df.new$F0 instead
 
-Fsea <- as.data.frame.table(x$Fseason) %>%
-  group_by(year, space, season) %>% 
-  mutate(year = as.numeric(as.character(year))) %>%
-  summarise(Ftot = sum(Freq)) %>% 
-  filter(year >= 2010 & year <= most_recent_year, season == "1")
+Fsea_by_age_all <- as.data.frame.table(x$Fseason) %>%
+  filter(year %in% 1983:2042, season == "1") %>%  # all spaces
+  mutate(
+    year = as.numeric(as.character(year)),
+    age = as.numeric(as.character(age)),
+    space = factor(space)  # treat space as a factor for plotting
+  ) %>%
+  filter(year >= 2010)
+
+green_palette <- colorRampPalette(c("#e8f8f0", "#d0f0dc", "#a8ddb5", "#66c27c", "#008822"))(5)
 
 #dev.copy(png,'C:/Users/chris/Desktop/DTU/R/ORIG/SMSR/PLOTS/0.36-0.36-0/F P.AREA - 0.36, 0.36, 0.png', width=5000, height=3000, res=300)
 #dev.copy(png,'C:/Users/chris/Desktop/DTU/R/ORIG/SMSR/PLOTS/0-0.36-0/F P.AREA - 0, 0.36, 0.png', width=5000, height=3000, res=300)
 #dev.copy(png,'C:/Users/chris/Desktop/DTU/R/ORIG/SMSR/PLOTS/0-0.99-0.001/F P.AREA - 0, 0.99, 0.001.png', width=5000, height=3000, res=300)
 #dev.copy(png,'C:/Users/chris/Desktop/DTU/R/ORIG/SMSR/PLOTS/0-0.44-0/F P.AREA - 0, 0.44, 0.png', width=5000, height=3000, res=300)
 
-ggplot(Fsea,aes(x = year, y= Ftot/3, color = space)) +
-  theme_bw() +
-  geom_line(linewidth=1.5) +
-  geom_point(size=3.5) +
-  geom_vline(aes(xintercept = 2025)) +
-  labs(title = "F (P/AREA) 2025-2035 YEARS", y = "F (year^(-1))", x = "Years") +
-  scale_x_continuous(breaks = seq(min(df.new$years), max(df.new$years), by = 3)) +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
-  theme(axis.text.y = element_text(angle = 45, hjust = 1)) +
-  scale_colour_manual(labels = c("EU S EEZ", "UK EEZ", "EU N EEZ"), values = c("#619cff", "#f8766d", "#00ba38")) +
+FPAREA <-ggplot(Fsea_by_age_all, aes(x = year, y = Freq, group = factor(age), color = factor(age), linetype = factor(age))) +
+    theme_bw() +
+  geom_line(linewidth = 1.2) +
+  geom_point(size = 2.5) +
+  scale_color_manual(values = green_palette, name = "Age", labels = paste("Age", 0:4)) +
+  scale_linetype_manual(values = c("solid", "solid", "solid", "solid", "dotted")) +
+  geom_vline(aes(xintercept = 2025), linetype = "dashed") +
+  labs(
+    title = "Fishing Mortality (F) by Age Class and Sub-Area",
+    subtitle = "Season 1, Years 2010–2034",
+    y = "F (year⁻¹)", x = "Year",
+    color = "Age"
+  ) +
+  facet_wrap(~ space, labeller = labeller(space = c("1" = "Sub-Area 1", "2" = "Sub-Area 2", "3" = "Sub-Area 3"))) +
+  scale_x_continuous(breaks = seq(min(Fsea_by_age_all$year), max(Fsea_by_age_all$year), by = 3)) +
   scale_y_continuous(labels = label_comma()) +
-  theme(text = element_text(size = 20)) +
-  theme(legend.position = c(0.93, 0.86), legend.title=element_blank()) +
-  theme(legend.box.background = element_rect(color="black", size=0.3), legend.box.margin = margin(1, 1, 1, 1)) +
-  theme(legend.key.size = unit(1, 'cm'))
+  theme(
+    text = element_text(size = 20),
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    axis.text.y = element_text(angle = 45, hjust = 1),
+    legend.position = c(0.852, 1.09),
+    legend.direction = "horizontal",
+    legend.title = element_blank(),
+    legend.box.background = element_rect(color = "black", size = 0.3),
+    legend.box.margin = margin(1, 1, 1, 1),
+    legend.key.size = unit(1, 'cm')
+  ) +
+  scale_x_continuous(breaks = seq(min(Fsea_by_age_all$year), max(Fsea_by_age_all$year), by = 3)) +
+  scale_y_continuous(labels = label_comma()) +
+  guides(
+    fill = guide_legend(override.aes = list(size = 10, shape = 15)),
+    linetype = "none",
+    color = guide_legend(label.position = "left")) #this hides the extra linetype legend
 
 #dev.off()
 
@@ -507,32 +553,53 @@ ggplot(Fsea,aes(x = year, y= Ftot/3, color = space)) +
 #################### F SUM ##################
 #############################################
 
-Fbar <- as.data.frame(x$Fbar) %>%
-  mutate(years = df.new$years) %>%
-  mutate(Area = 'SA1') %>% 
-  rename('Ftot' = 'x$Fbar') %>%
-  filter(years >= 2010 & years <= most_recent_year)
+# Convert Fseason into a tidy dataframe
+F_by_age <- as.data.frame.table(x$Fseason) %>%
+  mutate(
+    age = as.numeric(as.character(age)),
+    year = as.numeric(as.character(year)),
+    F = Freq
+  ) %>%
+  filter(year >= 2010)
+
+# Summarise total F per age and year (summing across space and season)
+F_total_age_year <- F_by_age %>%
+  group_by(year, age) %>%
+  summarise(Ftot = sum(F), .groups = "drop")
 
 #dev.copy(png,'C:/Users/chris/Desktop/DTU/R/ORIG/SMSR/PLOTS/0.36-0.36-0/F SUM - 0.36, 0.36, 0.png', width=5000, height=3000, res=300)
 #dev.copy(png,'C:/Users/chris/Desktop/DTU/R/ORIG/SMSR/PLOTS/0-0.36-0/F SUM - 0, 0.36, 0.png', width=5000, height=3000, res=300)
 #dev.copy(png,'C:/Users/chris/Desktop/DTU/R/ORIG/SMSR/PLOTS/0-0.99-0.001/F SUM - 0, 0.99, 0.001.png', width=5000, height=3000, res=300)
 #dev.copy(png,'C:/Users/chris/Desktop/DTU/R/ORIG/SMSR/PLOTS/0-0.44-0/F SUM - 0, 0.44, 0.png', width=5000, height=3000, res=300)
 
-ggplot(data = Fbar, aes(x = years, y = Ftot)) +
-  geom_line(color = "#008822", linewidth=1.5, show.legend = FALSE) + 
-  geom_point(color = "#008822", size=3.5, show.legend = FALSE) +
+FSUM <- ggplot(F_total_age_year, aes(x = year, y = Ftot, group = factor(age), color = factor(age), linetype = factor(age))) +
+  geom_line(linewidth = 1.2) +
+  geom_point(size = 2.5) +
+  scale_color_manual(values = green_palette, name = "Age", labels = paste("Age", 0:4)) +
+  scale_linetype_manual(values = c("solid", "solid", "solid", "solid", "dotted")) +
+  geom_vline(aes(xintercept = 2024), linetype = "dashed") +
+  labs(
+    title = "Total Fishing Mortality (F) per Age Over Time",
+    y = "F (year⁻¹)", x = "Year"
+  ) +
   theme_bw() +
-  geom_vline(aes(xintercept = 2025)) +
-  labs(title = "Fbar (SUM) 2025-2035 YEARS", y = "F (year^(-1))", x = "Years") +
-  scale_x_continuous(breaks = seq(min(Fbar$year), max(Fbar$year), by = 3)) +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
-  theme(axis.text.y = element_text(angle = 45, hjust = 1)) +
-  guides(fill = guide_legend(override.aes = list(size = 10, shape = 15))) +
-  #scale_y_continuous(labels = label_comma()) +
-  theme(text = element_text(size = 20)) +
-  theme(legend.position = c(0.93, 0.89), legend.title=element_blank()) +
-  theme(legend.box.background = element_rect(color="black", size=0.3), legend.box.margin = margin(1, 1, 1, 1)) +
-  theme(legend.key.size = unit(1, 'cm'))
+  theme(
+    text = element_text(size = 20),
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    axis.text.y = element_text(angle = 45, hjust = 1),
+    legend.position = c(0.81, 0.89),
+    legend.direction = "horizontal",
+    legend.title = element_blank(),
+    legend.box.background = element_rect(color = "black", size = 0.3),
+    legend.box.margin = margin(1, 1, 1, 1),
+    legend.key.size = unit(1, 'cm')
+  ) +
+  scale_x_continuous(breaks = seq(min(F_total_age_year$year), max(F_total_age_year$year), by = 3)) +
+  scale_y_continuous(labels = label_comma()) +
+  guides(
+    fill = guide_legend(override.aes = list(size = 10, shape = 15)),
+    linetype = "none",
+    color = guide_legend(label.position = "left"))
 
 #dev.off()
 
@@ -548,21 +615,31 @@ ggplot(data = Fbar, aes(x = years, y = Ftot)) +
 #################### SSB PER AREA ####################
 ######################################################
 
-SSBPAREA <- ggplot(SSB, aes(x = years, y = SSB, color = area)) +
+SSBPAREA <- ggplot(SSB, aes(x = years, y = SSB/1000, color = area)) +
   theme_bw() +
   geom_line(linewidth=0.7) + #change to 1.7 for individual plot
-  geom_point(size=1.5) + #change to 4 for individual plot
-  geom_vline(aes(xintercept = 2025)) +
-  labs(title = "SSB (P/AREA) 2025-2035 YEARS", y = "SSB (Tonnes)", x = "Years") +
+  geom_point(size=1) + #change to 4 for individual plot
+  geom_vline(aes(xintercept = 2024), linetype = "dashed") +
+  labs(title = "SSB (P/AREA) 2023-2032 YEARS", y = "SSB (Thousand Tonnes)", x = "Years") +
   scale_x_continuous(breaks = seq(min(df.new$years), max(df.new$years), by = 3)) +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
-  theme(axis.text.y = element_text(angle = 45, hjust = 1)) +
-  scale_colour_manual(labels = c("EU S EEZ", "UK EEZ", "EU N EEZ"), values = c("#619cff", "#f8766d", "#00ba38")) +
   scale_y_continuous(labels = label_comma()) +
-  theme(text = element_text(size = 10)) + #change to 20 for individual plot
-  theme(legend.position = c(0.08, 0.74), legend.title=element_blank()) + #Use 0.93, 0.88 for individual plot
-  theme(legend.box.background = element_rect(color="black", size=0.3), legend.box.margin = margin(1, 1, 1, 1)) +
-  theme(legend.key.size = unit(0.1, 'cm'))
+  scale_colour_manual(name = "Area", labels = c("Sub-Area 1", "Sub-Area 2", "Sub-Area 3"), values = c("#619cff", "#f8766d", "#00ba38")) +
+theme(
+  text = element_text(size = 5),
+  axis.text.x = element_text(angle = 45, hjust = 1),
+  axis.text.y = element_text(angle = 45, hjust = 1),
+  #legend.position = c(0.80, 0.84), ORIGINAL
+  legend.position = c(0.80, 0.94),
+  legend.direction = "horizontal",
+  legend.title = element_blank(),
+  legend.box.background = element_rect(color = NA, size = 0.15),
+  legend.box.margin = margin(0, 0, 0, 0),
+  legend.margin = margin(0, 0, 0, 0),
+  legend.key.size = unit(0.1, 'cm')) +
+guides(
+    fill = guide_legend(override.aes = list(size = 10, shape = 15)),
+    linetype = "none",
+    color = guide_legend(label.position = "left")) #this hides the extra linetype legend
 
 ####################################################
 ##################### SSB SUM ######################
@@ -570,25 +647,22 @@ SSBPAREA <- ggplot(SSB, aes(x = years, y = SSB, color = area)) +
 
 #SUMMING THE 3 AREAS FOR BLIM COMPARISON
 
-SSBSUM <- ggplot(data = SSBsum, aes(x = years, y = SSBtot, fill = Area)) +
+SSBSUM <- ggplot(data = SSBsum, aes(x = years, y = SSBtot/1000, fill = Area)) +
   geom_line(color = "#008822", linewidth=0.7, show.legend = FALSE) + 
-  geom_point(color = "#008822", size=1.5, show.legend = FALSE) +
+  geom_point(color = "#008822", size=1, show.legend = FALSE) +
   theme_bw() +
-  geom_vline(aes(xintercept = 2025)) +
-  labs(title = "SSB (SUM) 2025-2035 YEARS", y = "SSB (Tonnes)", x = "Years") +
-  geom_hline(yintercept=140824, linetype=3, linewidth=1, color = "black") +
-  annotate("text", x = 2040, y = 140824, label = "B-escapement", size = 4, color = "black") +
-  geom_hline(yintercept=105809, linetype=3, linewidth=1, color = "red") +
-  annotate("text", x = 2041.5, y = 105809, label = "Blim", size = 4, color = "red") +
+  geom_vline(aes(xintercept = 2024), linetype = "dashed") +
+  labs(title = "SSB (SUM) 2023-2032 YEARS", y = "SSB (Thousand Tonnes)", x = "Years") +
+  geom_hline(yintercept=140824/1000, linetype=3, linewidth=0.5, color = "black") +
+  annotate("text", x = 2032.3, y = 440824/1000, label = "B-escapement", size = 2, color = "black") +
+  geom_hline(yintercept=105809/1000, linetype=3, linewidth=0.5, color = "red") +
+  annotate("text", x = 2033.6, y = 405809/1000, label = "Blim", size = 2, color = "red") +
   scale_x_continuous(breaks = seq(min(SSBsum$years), max(SSBsum$years), by = 3)) +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
-  theme(axis.text.y = element_text(angle = 45, hjust = 1)) +
-  guides(fill = guide_legend(override.aes = list(size = 10, shape = 15))) +
   scale_y_continuous(labels = label_comma()) +
-  theme(text = element_text(size = 10)) +
-  theme(legend.position = c(0.92, 0.69), legend.title=element_blank()) +
-  theme(legend.box.background = element_rect(color="black", size=0.3), legend.box.margin = margin(1, 1, 1, 1)) +
-  theme(legend.key.size = unit(0.1, 'cm'))
+  theme(
+    text = element_text(size = 5),
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    axis.text.y = element_text(angle = 45, hjust = 1))
 
 ####################################################
 #################### R PER AREA ####################
@@ -597,18 +671,28 @@ SSBSUM <- ggplot(data = SSBsum, aes(x = years, y = SSBtot, fill = Area)) +
 RPAREA <- ggplot(R.save, aes(x = years, y = R.save/1000000, color = area)) +
   theme_bw() +
   geom_line(linewidth=0.7) +
-  geom_point(size=1.5) +
-  geom_vline(aes(xintercept = 2025)) +
-  labs(title = "SSB 2025-2035 YEARS", y = "SSB (Tonnes)", x = "Years") +
+  geom_point(size=1) +
+  geom_vline(aes(xintercept = 2024), linetype = "dashed") +
+  labs(title = "R (P/AREA) 2023-2032 YEARS", y = "Recruitment (Million Tonnes)", x = "Years") +
   scale_x_continuous(breaks = seq(min(df.new$years), max(df.new$years), by = 3)) +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
-  theme(axis.text.y = element_text(angle = 45, hjust = 1)) +
-  scale_colour_manual(labels = c("EU S EEZ", "UK EEZ", "EU N EEZ"), values = c("#619cff", "#f8766d", "#00ba38")) +
   scale_y_continuous(labels = label_comma()) +
-  theme(text = element_text(size = 10)) +
-  theme(legend.position = c(0.08, 0.74), legend.title=element_blank()) + #Use 0.93, 0.88 for individual plot
-  theme(legend.box.background = element_rect(color="black", size=0.3), legend.box.margin = margin(1, 1, 1, 1)) +
-  theme(legend.key.size = unit(0.1, 'cm'))
+  scale_colour_manual(name = "Area", labels = c("Sub-Area 1", "Sub-Area 2", "Sub-Area 3"), values = c("#619cff", "#f8766d", "#00ba38")) +
+  theme(
+    text = element_text(size = 5),
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    axis.text.y = element_text(angle = 45, hjust = 1),
+    #legend.position = c(0.80, 0.84), ORIGINAL
+    legend.position = c(0.80, 0.94),
+    legend.direction = "horizontal",
+    legend.title = element_blank(),
+    legend.box.background = element_rect(color = NA, size = 0.15),
+    legend.box.margin = margin(0, 0, 0, 0),
+    legend.margin = margin(0, 0, 0, 0),
+    legend.key.size = unit(0.1, 'cm')) +
+  guides(
+    fill = guide_legend(override.aes = list(size = 10, shape = 15)),
+    linetype = "none",
+    color = guide_legend(label.position = "left"))
 
 ####################################################
 ###################### R SUM #######################
@@ -616,120 +700,257 @@ RPAREA <- ggplot(R.save, aes(x = years, y = R.save/1000000, color = area)) +
 
 RSUM <- ggplot(data = R.savesum, aes(x = years, y = R.savetot, fill = Area)) +
   geom_line(color = "#008822", linewidth=0.7, show.legend = FALSE) + 
-  geom_point(color = "#008822", size=1.5, show.legend = FALSE) +
+  geom_point(color = "#008822", size=1, show.legend = FALSE) +
   theme_bw() +
-  geom_vline(aes(xintercept = 2025)) +
-  labs(title = "R (SUM) 2025-2035 YEARS", y = "Recruitment (Millions)", x = "Years") +
+  geom_vline(aes(xintercept = 2024), linetype = "dashed") +
+  labs(title = "R (SUM) 2023-2032 YEARS", y = "Recruitment (Million Tonnes)", x = "Years") +
   scale_x_continuous(breaks = seq(min(R.savesum$years), max(R.savesum$years), by = 3)) +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
-  theme(axis.text.y = element_text(angle = 45, hjust = 1)) +
-  guides(fill = guide_legend(override.aes = list(size = 10, shape = 15))) +
   scale_y_continuous(labels = label_comma()) +
-  theme(text = element_text(size = 10)) +
-  theme(legend.position = c(0.92, 0.69), legend.title=element_blank()) +
-  theme(legend.box.background = element_rect(color="black", size=0.3), legend.box.margin = margin(1, 1, 1, 1)) +
-  theme(legend.key.size = unit(0.1, 'cm'))
+  theme(
+    text = element_text(size = 5),
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    axis.text.y = element_text(angle = 45, hjust = 1))
 
 #############################################
 ############### CATCH PER AREA ##############
 #############################################
 
-CPAREA <- ggplot(Catch,aes(x = year, y= Ctot, color = space)) +
+CPAREA <- ggplot(Catch,aes(x = year, y= Ctot/1000, color = space)) +
   theme_bw() +
   geom_line(linewidth=0.7) +
-  geom_point(size=1.5) +
-  geom_vline(aes(xintercept = 2025)) +
-  labs(title = "CATCH (P/AREA) 2025-2035 YEARS", y = "Catch (Tonnes)", x = "Years") +
+  geom_point(size=1) +
+  geom_vline(aes(xintercept = 2024), linetype = "dashed") +
+  labs(title = "CATCH (P/AREA) 2023-2032 YEARS", y = "Catch (Thousand Tonnes)", x = "Years") +
   scale_x_continuous(breaks = seq(min(df.new$years), max(df.new$years), by = 3)) +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
-  theme(axis.text.y = element_text(angle = 45, hjust = 1)) +
-  scale_colour_manual(labels = c("EU S EEZ", "UK EEZ", "EU N EEZ"), values = c("#619cff", "#f8766d", "#00ba38")) +
   scale_y_continuous(labels = label_comma()) +
-  theme(text = element_text(size = 10)) +
-  theme(legend.position = c(0.08, 0.74), legend.title=element_blank()) + #Use 0.93, 0.88 for individual plot
-  theme(legend.box.background = element_rect(color="black", size=0.3), legend.box.margin = margin(1, 1, 1, 1)) +
-  theme(legend.key.size = unit(0.1, 'cm'))
+  scale_colour_manual(name = "Area", labels = c("Sub-Area 1", "Sub-Area 2", "Sub-Area 3"), values = c("#619cff", "#f8766d", "#00ba38")) +
+  theme(
+    text = element_text(size = 5),
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    axis.text.y = element_text(angle = 45, hjust = 1),
+    #legend.position = c(0.80, 0.84), ORIGINAL
+    legend.position = c(0.80, 0.94),
+    legend.direction = "horizontal",
+    legend.title = element_blank(),
+    legend.box.background = element_rect(color = NA, size = 0.15),
+    legend.box.margin = margin(0, 0, 0, 0),
+    legend.margin = margin(0, 0, 0, 0),
+    legend.key.size = unit(0.1, 'cm')) +
+  guides(
+    fill = guide_legend(override.aes = list(size = 10, shape = 15)),
+    linetype = "none",
+    color = guide_legend(label.position = "left"))
+
 
 #############################################
 ################# CATCH SUM #################
 #############################################
 
-CSUM <- ggplot(data = CSUM, aes(x = year, y = Ctot, fill = Area)) +
+CASUM <- ggplot(data = CSUM, aes(x = year, y = Ctot/1000, fill = Area)) +
   geom_line(color = "#008822", linewidth=0.7, show.legend = FALSE) + 
-  geom_point(color = "#008822", size=1.5, show.legend = FALSE) +
+  geom_point(color = "#008822", size=1, show.legend = FALSE) +
   theme_bw() +
-  geom_vline(aes(xintercept = 2025)) +
-  labs(title = "CATCH (SUM) 2025-2035 YEARS", y = "Catch (Tonnes)", x = "Years") +
+  geom_vline(aes(xintercept = 2024), linetype = "dashed") +
+  labs(title = "CATCH (SUM) 2023-2032 YEARS", y = "Catch (Thousand Tonnes)", x = "Years") +
   scale_x_continuous(breaks = seq(min(CSUM$year), max(CSUM$year), by = 3)) +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
-  theme(axis.text.y = element_text(angle = 45, hjust = 1)) +
-  guides(fill = guide_legend(override.aes = list(size = 10, shape = 15))) +
   scale_y_continuous(labels = label_comma()) +
-  theme(text = element_text(size = 10)) +
-  theme(legend.position = c(0.92, 0.69), legend.title=element_blank()) +
-  theme(legend.box.background = element_rect(color="black", size=0.3), legend.box.margin = margin(1, 1, 1, 1)) +
-  theme(legend.key.size = unit(0.1, 'cm'))
+theme(
+  text = element_text(size = 5),
+  axis.text.x = element_text(angle = 45, hjust = 1),
+  axis.text.y = element_text(angle = 45, hjust = 1))
+
+
 
 #############################################
 ############### F PER AREA ##################
 #############################################
 
-FPAREA <- ggplot(Fsea,aes(x = year, y= Ftot, color = space)) +
+#FIX FOR F IS USING df.new$F0 instead
+
+Fsea_by_age_all <- as.data.frame.table(x$Fseason) %>%
+  filter(year %in% 1983:2042, season == "1") %>%  # all spaces
+  mutate(
+    year = as.numeric(as.character(year)),
+    age = as.numeric(as.character(age)),
+    space = factor(space)  # treat space as a factor for plotting
+  ) %>%
+  filter(year >= 2010)
+
+#dev.copy(png,'C:/Users/chris/Desktop/DTU/R/ORIG/SMSR/PLOTS/0.36-0.36-0/F P.AREA - 0.36, 0.36, 0.png', width=5000, height=3000, res=300)
+#dev.copy(png,'C:/Users/chris/Desktop/DTU/R/ORIG/SMSR/PLOTS/0-0.36-0/F P.AREA - 0, 0.36, 0.png', width=5000, height=3000, res=300)
+#dev.copy(png,'C:/Users/chris/Desktop/DTU/R/ORIG/SMSR/PLOTS/0-0.99-0.001/F P.AREA - 0, 0.99, 0.001.png', width=5000, height=3000, res=300)
+#dev.copy(png,'C:/Users/chris/Desktop/DTU/R/ORIG/SMSR/PLOTS/0-0.44-0/F P.AREA - 0, 0.44, 0.png', width=5000, height=3000, res=300)
+
+custom_labeller <- labeller(
+  space = c(
+    "1" = "<span style='color:#619cff'><b>Sub-Area 1</b></span>",
+    "2" = "<span style='color:#f8766d'><b>Sub-Area 2</b></span>",
+    "3" = "<span style='color:#00ba38'><b>Sub-Area 3</b></span>"
+  )
+)
+
+FPAREA <-ggplot(Fsea_by_age_all, aes(x = year, y = Freq, group = factor(age), color = factor(age), linetype = factor(age))) +
   theme_bw() +
-  geom_line(linewidth=0.7) +
-  geom_point(size=1.5) +
-  geom_vline(aes(xintercept = 2025)) +
-  labs(title = "F (P/AREA) 2025-2035 YEARS", y = "F (year^(-1))", x = "Years") +
-  scale_x_continuous(breaks = seq(min(df.new$years), max(df.new$years), by = 3)) +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
-  theme(axis.text.y = element_text(angle = 45, hjust = 1)) +
-  scale_colour_manual(labels = c("EU S EEZ", "UK EEZ", "EU N EEZ"), values = c("#619cff", "#f8766d", "#00ba38")) +
+  geom_line(linewidth=0.7) + #change to 1.7 for individual plot
+  geom_point(size=0.5) + #change to 4 for individual plot
+  scale_color_manual(values = green_palette, name = "Age", labels = paste("Age", 0:4)) +
+  scale_linetype_manual(values = c("solid", "solid", "solid", "solid", "dotted")) +
+  geom_vline(aes(xintercept = 2024), linetype = "dashed") +
+  labs(
+    title = "Fishing Mortality (F) by Age Class and Sub-Area",
+    y = "F (year⁻¹)", x = "Years",
+    color = "Age"
+  ) +
+  facet_wrap(~ space, labeller = custom_labeller) +
+  #facet_wrap(~ space, labeller = labeller(space = c("1" = "Sub-Area 1", "2" = "Sub-Area 2", "3" = "Sub-Area 3"))) +
+  scale_x_continuous(breaks = seq(min(Fsea_by_age_all$year), max(Fsea_by_age_all$year), by = 3)) +
   scale_y_continuous(labels = label_comma()) +
-  theme(text = element_text(size = 10)) +
-  theme(legend.position = c(0.08, 0.74), legend.title=element_blank()) + #Use 0.93, 0.88 for individual plot
-  theme(legend.box.background = element_rect(color="black", size=0.3), legend.box.margin = margin(1, 1, 1, 1)) +
-  theme(legend.key.size = unit(0.1, 'cm'))
+  theme(
+    strip.text = ggtext::element_markdown(face = "bold", size = 5),
+    strip.background = element_rect(fill = "#ffffff"),
+    text = element_text(size = 5),
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    axis.text.y = element_text(angle = 45, hjust = 1),
+    #legend.position = c(0.756, 1.62), ORIGINAL
+    legend.position = c(0.756, 1.19),
+    legend.direction = "horizontal",
+    legend.title = element_blank(),
+    legend.box.background = element_rect(color = NA, size = 0.15),
+    legend.box.margin = margin(0, 0, 0, 0),
+    legend.margin = margin(0, 0, 0, 0),
+    legend.key.size = unit(0.1, 'cm')
+  ) +
+  guides(
+    color = guide_legend(
+      override.aes = list(size = 1.5),  # Show round points, larger size
+      label.position = "left"
+    ),
+    linetype = "none"  # Hide separate linetype legend
+  )
+
+#dev.off()
 
 #############################################
 #################### F SUM ##################
 #############################################
 
-FSUM <- ggplot(data = Fbar, aes(x = years, y = Ftot/3, fill = Area)) +
-  geom_line(color = "#008822", linewidth=0.7, show.legend = FALSE) + 
-  geom_point(color = "#008822", size=1.5, show.legend = FALSE) +
+# Convert Fseason into a tidy dataframe
+F_by_age <- as.data.frame.table(x$Fseason) %>%
+  mutate(
+    age = as.numeric(as.character(age)),
+    year = as.numeric(as.character(year)),
+    F = Freq
+  ) %>%
+  filter(year >= 2010, season == "1")
+
+# Summarise total F per age and year (summing across space and season)
+F_total_age_year <- F_by_age %>%
+  group_by(year, age) %>%
+  summarise(Ftot = sum(F), .groups = "drop")
+
+#dev.copy(png,'C:/Users/chris/Desktop/DTU/R/ORIG/SMSR/PLOTS/0.36-0.36-0/F SUM - 0.36, 0.36, 0.png', width=5000, height=3000, res=300)
+#dev.copy(png,'C:/Users/chris/Desktop/DTU/R/ORIG/SMSR/PLOTS/0-0.36-0/F SUM - 0, 0.36, 0.png', width=5000, height=3000, res=300)
+#dev.copy(png,'C:/Users/chris/Desktop/DTU/R/ORIG/SMSR/PLOTS/0-0.99-0.001/F SUM - 0, 0.99, 0.001.png', width=5000, height=3000, res=300)
+#dev.copy(png,'C:/Users/chris/Desktop/DTU/R/ORIG/SMSR/PLOTS/0-0.44-0/F SUM - 0, 0.44, 0.png', width=5000, height=3000, res=300)
+
+FSUM <- ggplot(F_total_age_year, aes(x = year, y = Ftot, group = factor(age), color = factor(age), linetype = factor(age))) +
+  geom_line(linewidth=0.7) + #change to 1.7 for individual plot
+  geom_point(size=0.5) + #change to 4 for individual plot
+  scale_color_manual(values = green_palette, name = "Age", labels = paste("Age", 0:4)) +
+  scale_linetype_manual(values = c("solid", "solid", "solid", "solid", "dotted")) +
+  geom_vline(aes(xintercept = 2024), linetype = "dashed") +
+  labs(
+    title = "Total Fishing Mortality (F) per Age Over Time",
+    y = "F (year⁻¹)", x = "Years"
+  ) +
   theme_bw() +
-  geom_vline(aes(xintercept = 2025)) +
-  labs(title = "Fbar (SUM) 2025-2035 YEARS", y = "F (year^(-1))", x = "Years") +
-  scale_x_continuous(breaks = seq(min(Fbar$year), max(Fbar$year), by = 3)) +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
-  theme(axis.text.y = element_text(angle = 45, hjust = 1)) +
-  guides(fill = guide_legend(override.aes = list(size = 10, shape = 15))) +
+  theme(
+    text = element_text(size = 5),
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    axis.text.y = element_text(angle = 45, hjust = 1),
+    legend.position = c(0.756, 1.18),
+    legend.direction = "horizontal",
+    legend.title = element_blank(),
+    legend.box.background = element_rect(color = NA, size = 0.15),
+    legend.box.margin = margin(0, 0, 0, 0),
+    legend.margin = margin(0, 0, 0, 0),
+    legend.key.size = unit(0.1, 'cm')
+  ) +
+  scale_x_continuous(breaks = seq(min(F_total_age_year$year), max(F_total_age_year$year), by = 3)) +
   scale_y_continuous(labels = label_comma()) +
-  theme(text = element_text(size = 10)) +
-  theme(legend.position = c(0.92, 0.69), legend.title=element_blank()) +
-  theme(legend.box.background = element_rect(color="black", size=0.3), legend.box.margin = margin(1, 1, 1, 1)) +
-  theme(legend.key.size = unit(0.1, 'cm'))
+  guides(
+    color = guide_legend(
+      override.aes = list(size = 1.5),  # Show round points, larger size
+      label.position = "left"
+    ),
+    linetype = "none"  # Hide separate linetype legend
+  )
 
 ########################### GRID PLOTS #########################
+setwd("C:/Users/chris/Desktop/LATEST MODEL/PLOTS")
 
-dev.copy(png,'C:/Users/chris/Desktop/DTU/R/ORIG/SMSR/PLOTS/0.36-0.36-0/ADVICE - 0.36, 0.36, 0.png', width=5000, height=3000, res=300)
-grid.arrange(SSBPAREA, SSBSUM, RPAREA, RSUM, CPAREA, CSUM, FPAREA, FSUM, ncol = 2, nrow = 4)
+#########################################################
+#################### CLAUS STUFF ########################
+#########################################################
+
+############# ASHBJORN
+bottom_title <- grid::textGrob(
+  "40% from Area 2 to 3 - Matrix Scenario",
+  gp = grid::gpar(fontsize = 20, fontface = "bold")
+)
+
+fourty_2_3_migration_matrix <- list(SSBPAREA, RPAREA, CPAREA, FPAREA)
+fourty_2_3_migration_matrix_grid <- arrangeGrob(grobs = fourty_2_3_migration_matrix, ncol = 2, nrow = 2, bottom = bottom_title)
+grid::grid.draw(fourty_2_3_migration_matrix_grid)
+# Save to file
+png("C:/Users/chris/Desktop/LATEST MODEL/PLOTS/CLAUS/40_2_3_plots.png", width = 5000, height = 3000, res = 600)
+grid::grid.draw(fourty_2_3_migration_matrix_grid)
 dev.off()
 
-dev.copy(png,'C:/Users/chris/Desktop/DTU/R/ORIG/SMSR/PLOTS/0-0.33-0/ADVICE - 0, 0.33, 0.png', width=5000, height=3000, res=300)
-grid.arrange(SSBPAREA, SSBSUM, RPAREA, RSUM, CPAREA, CSUM, FPAREA, FSUM, ncol = 2, nrow = 4)
+############# ASHBJORN
+bottom_title <- grid::textGrob(
+  "Asbjorne Migration Matrix Scenario",
+  gp = grid::gpar(fontsize = 20, fontface = "bold")
+)
+
+asbjorne_migration_matrix <- list(SSBPAREA, RPAREA, CPAREA, FPAREA)
+asbjorne_migration_matrix_grid <- arrangeGrob(grobs = asbjorne_migration_matrix, ncol = 2, nrow = 2, bottom = bottom_title)
+grid::grid.draw(asbjorne_migration_matrix_grid)
+# Save to file
+png("C:/Users/chris/Desktop/LATEST MODEL/PLOTS/CLAUS/asbjorne_plots.png", width = 5000, height = 3000, res = 600)
+grid::grid.draw(asbjorne_migration_matrix_grid)
 dev.off()
 
-dev.copy(png,'C:/Users/chris/Desktop/DTU/R/ORIG/SMSR/PLOTS/0-0.99-0.001/LASTYEAR - 0, 0.99, 0.001.png', width=5000, height=3000, res=300)
-grid.arrange(SSBPAREA, SSBSUM, RPAREA, RSUM, CPAREA, CSUM, FPAREA, FSUM, ncol = 2, nrow = 4)
+#########################################################
+#################### CLAUS STUFF ########################
+#########################################################
+
+dev.copy(png,'C:/Users/chris/Desktop/LATEST MODEL/PLOTS/SCENARIO 1/ADVICE - 0.0, 0.0, 0.0.png', width=5000, height=3000, res=600)
+grid.arrange(SSBPAREA, SSBSUM, RPAREA, RSUM, CPAREA, CASUM, FPAREA, FSUM, ncol = 2, nrow = 4)
 dev.off()
 
-dev.copy(png,'C:/Users/chris/Desktop/DTU/R/ORIG/SMSR/PLOTS/0.56-0.44-0/LAST5YEARS - 0.56,0.44,0.png', width=5000, height=3000, res=300)
-grid.arrange(SSBPAREA, SSBSUM, RPAREA, RSUM, CPAREA, CSUM, FPAREA, FSUM, ncol = 2, nrow = 4)
+dev.copy(png,'C:/Users/chris/Desktop/LATEST MODEL/PLOTS/SCENARIO 1/ADVICE - 0.33, 0.33, 0.33.png', width=5000, height=3000, res=600)
+grid.arrange(SSBPAREA, SSBSUM, RPAREA, RSUM, CPAREA, CASUM, FPAREA, FSUM, ncol = 2, nrow = 4)
 dev.off()
 
-dev.copy(png,'C:/Users/chris/Desktop/DTU/R/ORIG/SMSR/PLOTS/0-0.44-0/LAST5YEARS - 0, 0.44, 0.png', width=5000, height=3000, res=300)
-grid.arrange(SSBPAREA, SSBSUM, RPAREA, RSUM, CPAREA, CSUM, FPAREA, FSUM, ncol = 2, nrow = 4)
+dev.copy(png,'C:/Users/chris/Desktop/LATEST MODEL/PLOTS/SCENARIO 2/ADVICEB - 0.85, 0.85, 0.85.png', width=5000, height=3000, res=600)
+grid.arrange(SSBPAREA, SSBSUM, RPAREA, RSUM, CPAREA, CASUM, FPAREA, FSUM, ncol = 2, nrow = 4)
+dev.off()
+
+dev.copy(png,'C:/Users/chris/Desktop/LATEST MODEL/PLOTS/SCENARIO 3/ONLYBREX - 0, 0.33, 0.0.png', width=5000, height=3000, res=600)
+grid.arrange(SSBPAREA, SSBSUM, RPAREA, RSUM, CPAREA, CASUM, FPAREA, FSUM, ncol = 2, nrow = 4)
+dev.off()
+
+dev.copy(png,'C:/Users/chris/Desktop/LATEST MODEL/PLOTS/SCENARIO 4/ONLYBREX - 0, 0.33, 0.0.png', width=5000, height=3000, res=600)
+grid.arrange(SSBPAREA, SSBSUM, RPAREA, RSUM, CPAREA, CASUM, FPAREA, FSUM, ncol = 2, nrow = 4)
+dev.off()
+
+dev.copy(png,'C:/Users/chris/Desktop/LATEST MODEL/PLOTS/SCENARIO 5/ONLYBREX - 0, 0.33, 0.0.png', width=5000, height=3000, res=600)
+grid.arrange(SSBPAREA, SSBSUM, RPAREA, RSUM, CPAREA, CASUM, FPAREA, FSUM, ncol = 2, nrow = 4)
+dev.off()
+
+dev.copy(png,'C:/Users/chris/Desktop/LATEST MODEL/PLOTS/SCENARIO 6/ONLYBREX - 0, 0.33, 0.0.png', width=5000, height=3000, res=600)
+grid.arrange(SSBPAREA, SSBSUM, RPAREA, RSUM, CPAREA, CASUM, FPAREA, FSUM, ncol = 2, nrow = 4)
 dev.off()
 
 
@@ -746,12 +967,12 @@ S2 <- ggplot(SSB, aes(x = years, y = SSB, color = area)) +
   theme_bw() +
   geom_line(linewidth=0.7) + #change to 1.7 for individual plot
   geom_point(size=1.5) + #change to 4 for individual plot
-  geom_vline(aes(xintercept = 2025)) +
+  geom_vline(aes(xintercept = 2024)) +
   labs(title = "SENSITIVITY - 0.1, 0.8, 0.1", y = "SSB (Tonnes)", x = "Years") +
   scale_x_continuous(breaks = seq(min(df.new$years), max(df.new$years), by = 3)) +
   theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
   theme(axis.text.y = element_text(angle = 45, hjust = 1)) +
-  scale_colour_manual(labels = c("EU S EEZ", "UK EEZ", "EU N EEZ"), values = c("#619cff", "#f8766d", "#00ba38")) +
+  scale_colour_manual(labels = c("UK", "EU North", "EU South"), values = c("#f8766d", "#00ba38", "#619cff")) +
   scale_y_continuous(labels = label_comma()) +
   theme(text = element_text(size = 10)) + #change to 20 for individual plot
   theme(legend.position = c(0.98, 0.91), legend.title=element_blank()) + #Use 0.93, 0.88 for individual plot
@@ -791,6 +1012,23 @@ CatchFIVEB <- as.data.frame.table(x$Catch.save.age, responseName = 'Catch') %>%
   summarise(Ctot = sum(Catch)) %>% 
   mutate(year = as.numeric(as.character(year)), scenario = "FIVEB")
 
+########################################
+
+NATURAL <- as.data.frame.table(x$Catch.save.age, responseName = 'Catch') %>% 
+  group_by(year, space) %>%
+  summarise(Ctot = sum(Catch)) %>% 
+  mutate(year = as.numeric(as.character(year)), scenario = "NATURAL")
+
+VULNERABLE <- as.data.frame.table(x$Catch.save.age, responseName = 'Catch') %>% 
+  group_by(year, space) %>%
+  summarise(Ctot = sum(Catch)) %>% 
+  mutate(year = as.numeric(as.character(year)), scenario = "VULNERABLE")
+
+SUSTAINABLE <- as.data.frame.table(x$Catch.save.age, responseName = 'Catch') %>% 
+  group_by(year, space) %>%
+  summarise(Ctot = sum(Catch)) %>% 
+  mutate(year = as.numeric(as.character(year)), scenario = "SUSTAINABLE")
+
 #CatchNOF <- as.data.frame.table(x$Catch.save.age, responseName = 'Catch') %>% 
 #  group_by(year, space) %>%
 #  summarise(Ctot = sum(Catch)) %>% 
@@ -809,6 +1047,12 @@ CFIVEB <- CatchFIVEB %>% group_by(year) %>% summarise(Ctot = sum(Ctot)) %>%
 #CNOF <- CatchNOF %>% group_by(year) %>% summarise(Ctot = sum(Ctot)) %>%  
 #  mutate(Area = 'SA1', scenario = "CNOF")
 
+CNATURAL <- NATURAL %>% group_by(year) %>% summarise(Ctot = sum(Ctot)) %>%  
+  mutate(Area = 'SA1', scenario = "NATURAL")
+CVULNERABLE <- VULNERABLE %>% group_by(year) %>% summarise(Ctot = sum(Ctot)) %>%  
+  mutate(Area = 'SA1', scenario = "VULNERABLE")
+CSUSTAINABLE <- SUSTAINABLE %>% group_by(year) %>% summarise(Ctot = sum(Ctot)) %>%  
+  mutate(Area = 'SA1', scenario = "SUSTAINABLE")
 
 CATCHALLSUM <- data.frame(CADVICE, CADVICEB, CLASTYEAR, CFIVE, CFIVEB)
 names(CATCHALLSUM) <- c('year','Ctot','Area', 'scenario', 'year','Ctot','Area', 'scenario', 'year','Ctot','Area', 'scenario', 'year','Ctot','Area', 'scenario', 'year','Ctot','Area', 'scenario')
@@ -818,19 +1062,27 @@ CLASTYEARP <- CLASTYEAR %>% filter(CLASTYEAR$year %in% 2022:2032)
 CFIVEP <- CFIVE %>% filter(CFIVE$year %in% 2022:2032) 
 CFIVEBP <- CFIVEB %>% filter(CFIVEB$year %in% 2022:2032)
 
-CATCHALLSUMPLOT <- rbind(CADVICEP, CADVICEBP, CLASTYEARP, CFIVEP, CFIVEBP)           
+###################################
+
+CNATURALP <- CNATURAL %>% filter(CNATURAL$year %in% 2022:2032)
+CVULNERABLEP <- CVULNERABLE %>% filter(CVULNERABLE$year %in% 2022:2032)
+CSUSTAINABLEP <- CSUSTAINABLE %>% filter(CSUSTAINABLE$year %in% 2022:2032)
+CATCHALLSUMPLOT <- rbind(CNATURALP, CVULNERABLEP, CSUSTAINABLEP)
+
+CATCHALLSUMPLOT <- rbind(CADVICEP, CADVICEBP, CLASTYEARP, CFIVEP, CFIVEBP)
 #########################################################################
 #########################CATCH AND SSB SCENARIOS ########################
 #########################################################################
 
-dev.copy(png,'C:/Users/chris/Desktop/DTU/R/ORIG/SMSR/PLOTS/CATCHSCENARIOS.png', width=5000, height=3000, res=300)
+dev.copy(png,'C:/Users/chris/Desktop/LATEST MODEL/PLOTS/FORECAST/CATCHSCENARIOS.png', width=5000, height=3000, res=300)
 
 CATCHGRID <- ggplot(data = CATCHALLSUMPLOT, aes(x = year, y = Ctot)) +
-  geom_line(aes(color = scenario, linetype = scenario), linewidth=2.5) +
-  scale_color_manual(values=c("#00264A", "#00264A", "#66a103", "#66a103", "#f8766d")) +
-  scale_linetype_manual(values=c("solid", "solid", "dashed", "dashed", "dotted"))+
+  geom_line(aes(color = scenario, linetype = scenario), linewidth=5) +
+  #scale_color_manual(values=c("#00264A", "#00264A", "#66a103", "#66a103", "#f8766d")) +
+  #scale_linetype_manual(values=c("solid", "solid", "dashed", "dashed", "dotted"))+
+  scale_color_manual(values=c("#00ba38", "#619cff", "#f8766d")) +
   theme_bw() +
-  geom_vline(aes(xintercept = 2025)) +
+  geom_vline(aes(xintercept = 2024)) +
   labs(title = "CATCH SCENARIOS 2022-2032 YEARS", y = "Catch (Tonnes)", x = "Years") +
   scale_x_continuous(breaks = seq(min(CATCHALLSUMPLOT$year), max(CATCHALLSUMPLOT$year), by = 3)) +
   theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
@@ -874,6 +1126,19 @@ SSBFIVEB <- as.data.frame(x$SSB) %>%
 #  mutate(years = df.new$years) %>%
 #  pivot_longer(1:df.new$nspace, values_to = 'SSB', names_to = 'area')
 
+SSBNATURAL <- as.data.frame(x$SSB) %>%
+  mutate(years = df.new$years) %>%
+  pivot_longer(1:df.new$nspace, values_to = 'SSB', names_to = 'area')
+
+SSBVULNERABLE <- as.data.frame(x$SSB) %>%
+  mutate(years = df.new$years) %>%
+  pivot_longer(1:df.new$nspace, values_to = 'SSB', names_to = 'area')
+
+SSBSUSTAINABLE <- as.data.frame(x$SSB) %>%
+  mutate(years = df.new$years) %>%
+  pivot_longer(1:df.new$nspace, values_to = 'SSB', names_to = 'area')
+
+
 
 SADVICE <- SSBADVICE %>% group_by(years) %>% summarise(SSBtot = sum(SSB)) %>%  
   mutate(Area = 'SA1', scenario = "ADVICE")
@@ -888,6 +1153,13 @@ SFIVEB <- SSBFIVEB %>% group_by(years) %>% summarise(SSBtot = sum(SSB)) %>%
 #SNOF <- SSBNOF %>% group_by(years) %>% summarise(SSBtot = sum(SSB)) %>%  
 #  mutate(Area = 'SA1', scenario = "NOF")
 
+SNATURAL <- SSBNATURAL %>% group_by(years) %>% summarise(SSBtot = sum(SSB)) %>%  
+  mutate(Area = 'SA1', scenario = "NATURAL")
+SVULNERABLE <- SSBVULNERABLE %>% group_by(years) %>% summarise(SSBtot = sum(SSB)) %>%  
+  mutate(Area = 'SA1', scenario = "VULNERABLE")
+SSUSTAINABLE <- SSBSUSTAINABLE %>% group_by(years) %>% summarise(SSBtot = sum(SSB)) %>%  
+  mutate(Area = 'SA1', scenario = "SUSTAINABLE")
+
 
 SSBALLSUM <- data.frame(SADVICE, SADVICEB, SLASTYEAR, SFIVE, SFIVEB)
 names(SSBALLSUM) <- c('years','SSBtot','Area', 'scenario', 'years','SSBtot','Area', 'scenario', 'years','SSBtot','Area', 'scenario', 'years','SSBtot','Area', 'scenario', 'years','SSBtot','Area', 'scenario')
@@ -897,6 +1169,13 @@ SLASTYEARP <- SLASTYEAR %>% filter(SLASTYEAR$years %in% 2022:2032)
 SFIVEP <- SFIVE %>% filter(SFIVE$years %in% 2022:2032)
 SFIVEBP <- SFIVEB %>% filter(SFIVEB$years %in% 2022:2032)
 
+#########################################
+
+SNATURALP <- SNATURAL %>% filter(SNATURAL$years %in% 2022:2032)
+SVULNERABLEP <- SVULNERABLE %>% filter(SVULNERABLE$years %in% 2022:2032)
+SSUSTAINABLEP <- SSUSTAINABLE %>% filter(SSUSTAINABLE$years %in% 2022:2032)
+SSBALLSUMPLOT <- rbind(SNATURALP,SVULNERABLEP,SSUSTAINABLEP)
+
 SSBALLSUMPLOT <- rbind(SADVICEP,SADVICEBP,SLASTYEARP,SFIVEP,SFIVEBP)
 
 #########################################################################
@@ -904,12 +1183,13 @@ SSBALLSUMPLOT <- rbind(SADVICEP,SADVICEBP,SLASTYEARP,SFIVEP,SFIVEBP)
 #########################################################################
 library(ggtext)
 
-dev.copy(png,'C:/Users/chris/Desktop/DTU/R/ORIG/SMSR/PLOTS/SSBSCENARIOS.png', width=5000, height=3000, res=300)
+dev.copy(png,'C:/Users/chris/Desktop/LATEST MODEL/PLOTS/FORECAST/SSBSCENARIOS.png', width=5000, height=3000, res=300)
 
 SSBGRID <- ggplot(data = SSBALLSUMPLOT, aes(x = years, y = SSBtot)) +
-  geom_line(aes(color = scenario, linetype = scenario), linewidth=2.5) +
-  scale_color_manual(values=c("#00264A", "#00264A", "#66a103", "#66a103", "#f8766d")) +
-  scale_linetype_manual(values=c("solid", "solid", "dashed", "dashed", "dotted"))+
+  geom_line(aes(color = scenario, linetype = scenario), linewidth=5) +
+  #scale_color_manual(values=c("#00264A", "#00264A", "#66a103", "#66a103", "#f8766d")) +
+  #scale_linetype_manual(values=c("solid", "solid", "dashed", "dashed", "dotted"))+
+  scale_color_manual(values=c("#00ba38", "#619cff", "#f8766d")) +
   theme_bw() +
   geom_vline(aes(xintercept = 2024), linewidth=1) +
   labs(title = "SSB SCENARIOS 2022-2032 YEARS", y = "SSB (Tonnes)", x = "Years") +
