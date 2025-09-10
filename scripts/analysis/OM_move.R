@@ -11,7 +11,6 @@ library(ggplot2)
 library(gridExtra)
 library(grid)
 library(scales)
-library(here)
 
 #install_github('nissandjac/smsR') - INSTALL UPDATES
 
@@ -19,36 +18,40 @@ library(here)
 #the relative distribution of catches from 2010 to 2024. We then need to run the script 'F_NIS gives' which outputs
 #'relative.catch'. Relative catch is then fed into 'R/get_OM_parameters_NIS_fix.R' when the model is run.
 
-migration_matrix <- matrix(c(
-  #To:  1     2     3
-  0.03, 0.0,  0.18, # From 1 -----> EU SOUTH
-  0.0,  0.41, 0.14, # From 2 -----> UK
-  0.0,  0.02, 0.14  # From 3 -----> EU NORTH
-), nrow = 3, byrow = TRUE)
-
 #migration_matrix <- matrix(c(
-#To:  1     2     3
-#      0.50,0.70,0.40,   # From 1 -----> EU SOUTH
-#      0.1,0.1,0.1,   # From 2 -----> UK
-#      0.50,0.90,0.70   # From 3 -----> EU NORTH
+#To:  EU SOUTH - UK - EU NORTH
+#      0.03,     0.0,     0.18, # From 1 -----> EU SOUTH
+#      0.0,      0.41,    0.14, # From 2 -----> UK
+#      0.0,      0.02,    0.14  # From 3 -----> EU NORTH
 #), nrow = 3, byrow = TRUE)
 
-source(here("scripts/analysis", "OM_areas.R"))
+migration_matrix <- matrix(c(
+  #To:EU SOUTH - UK - EU NORTH
+  0.0745, 0.0000,   0.2134, # From 1 -----> EU SOUTH
+  0.0000, 0.4150,   0.1484, # From 2 -----> UK
+  0.0000, 0.0187,   0.1469),# From 3 -----> EU NORTH
+  nrow = 3, byrow = TRUE)
+
+setwd("C:/Users/chris/Desktop/GIT/Paper/scripts/")
+
+#source('analysis/OM_areas_CPUE.R')
 #source(here("scripts/analysis", "F_distribution.R"))
-source(here("scripts/functions", "get_OM_parameters_move.R"))
-source(here("scripts/functions", "run_agebased_sms_OP_move.R"))
-source(here("scripts/functions", "addYear.R"))
 
+setwd("C:/Users/chris/Desktop/GIT/Paper/scripts/functions/")
+source('get_OM_parameters_move.R')
+source('run_agebased_sms_OP_move.R')
+source('addYear.R')
+
+setwd("C:/Users/chris/Desktop/GIT/Paper/scripts/")
 # Read parameters from stock assessment
-parms <- readRDS(here("scripts/data/sandeel 1r", "area1r.rds"))
+parms <- readRDS('data/sandeel 1r/area1r.rds')
 #parms <- readRDS(here("scripts/data/sandeel 1r", "sandeel_1r_parms.rds"))
-
 
 sas <- parms[[2]]
 df.tmb <- parms[[1]]
 df.OM <- get_OM_parameters(df.tmb, sas,
                            nspace = 3,
-                           rec.space = c(0.03, 0.80, 0.14),
+                           rec.space = c(0.12, 0.46, 0.14),
                            #moverecruit = c(0.1,0.7,0.2),
                            migration_matrix = migration_matrix)
                            #movemax = c(0.1,0.2,0.1) # Movement between areas
@@ -57,11 +60,33 @@ df.OM <- get_OM_parameters(df.tmb, sas,
 
 x <- run.agebased.sms.op(df.OM)
 
+################# PLOT START ##################
+SSB <- as.data.frame(x$SSB) %>%
+  mutate(years = df.OM$years) %>%
+  pivot_longer(1:df.OM$nspace, values_to = 'SSB', names_to = 'area')
+
+#dev.copy(png,'D:/Aquatic Engineering 2021/THESIS/Model/SSB/SSB.png', width=5000, height=3000, res=300)
+
+setwd("C:/Users/chris/Desktop/LATEST MODEL/TEST/")
+
+p <- ggplot(SSB, aes(x = years, y = SSB,color = area)) +
+  geom_line(linewidth=5) +
+  theme_classic() +
+  labs(
+    title = "  0.9   # from EU NORTH → to EU NORTH", 
+    x = "Year", 
+    y = "Total SSB"
+  ) +
+  scale_colour_manual(name = "area", 
+  labels = c("Sub-Area 1", "Sub-Area 2", "Sub-Area 3"), 
+  values = c("#619cff", "#f8766d", "#00ba38"))
+ggsave("  0.9   # from EU NORTH → to EU NORTH.png", plot = p, dpi = 300, width = 12, height = 8)
+################# PLOT END ##################
+
+
 str(df.OM)
 
 #########################  CATCH START #############################
-# Define font sizes
-base_size <- 16
 # Step 1: Filter for season 1 (4th dimension)
 catch_season1 <- x$Catch.save.age[,,, "1"]
 # Step 2: Sum over the age dimension (1st dimension)
@@ -119,14 +144,14 @@ p <- ggplot(catch_df_filtered, aes(x = Year, y = total_catch, color = group)) +
   scale_color_manual(values = c("Sub-Area 1" = "#619cff", "Sub-Area 2" = "#f8766d", "Sub-Area 3" = "#00ba38")) + # Color for each area
   #scale_shape_manual(values = c("EU South" = 16, "UK EEZ" = 16, "EU North" = 16)) +  # Custom shapes
   theme(
-    plot.title = element_text(size = base_size * 1.2, face = "bold"),
-    axis.title = element_text(size = base_size),
-    axis.text = element_text(size = base_size * 0.8),
-    legend.title = element_text(size = base_size),
-    legend.text = element_text(size = base_size * 0.8),
+    plot.title = element_text(size = 12, face = "bold"),
+    axis.title = element_text(size = 12),
+    axis.text = element_text(size = 12),
+    legend.title = element_text(size = 12),
+    legend.text = element_text(size = 12),
     legend.position = "bottom",                # Move the legend to the bottom
     legend.direction = "horizontal",           # Make the legend items display in a horizontal line
-    strip.text = element_text(size = base_size * 1.1),
+    strip.text = element_text(size = 12),
     panel.background = element_rect(fill = "#F0F2F2"),
     plot.background = element_rect(fill = "white")
   ) +

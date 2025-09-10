@@ -137,14 +137,14 @@ p <- ggplot(catch_by_year, aes(x = Year, y = total_catch, color = group)) +
   # Adjust the x-axis to control the number of years shown
   scale_x_continuous(breaks = seq(2010, 2024, by = 2)) +  # Shows every 2 years from 2010 to 2024
   theme(
-    plot.title = element_text(size = base_size * 1.2, face = "bold"),
-    axis.title = element_text(size = base_size),
-    axis.text = element_text(size = base_size * 0.8),
-    legend.title = element_text(size = base_size),
-    legend.text = element_text(size = base_size * 0.8),
+    plot.title = element_text(size = 12, face = "bold"),
+    axis.title = element_text(size = 12),
+    axis.text = element_text(size = 12 * 0.8),
+    legend.title = element_text(size = 12),
+    legend.text = element_text(size = 12 * 0.8),
     legend.position = "bottom",                # Move the legend to the bottom
     legend.direction = "horizontal",           # Make the legend items display in a horizontal line
-    strip.text = element_text(size = base_size * 1.1),
+    strip.text = element_text(size = 12 * 1.1),
     panel.background = element_rect(fill = "#F0F2F2"),
     plot.background = element_rect(fill = "white")
   ) +

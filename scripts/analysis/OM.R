@@ -17,9 +17,9 @@ library(here)
 #the relative distribution of catches from 2010 to 2024. We then need to run the script 'F_NIS gives' which outputs
 #'relative.catch'. Relative catch is then fed into 'R/get_OM_parameters_NIS_fix.R' when the model is run.
 
-source(here("scripts/analysis", "OM_areas.R"))
-source(here("scripts/analysis", "F_distribution.R"))
-source(here("scripts/functions", "get_OM_parameters_F_distribution.R"))
+#source(here("scripts/analysis", "OM_areas.R"))
+#source(here("scripts/analysis", "F_distribution.R"))
+source(here("scripts/functions", "get_OM_parameters.R"))
 source(here("scripts/functions", "run_agebased_sms_OP.R"))
 source(here("scripts/functions", "addYear.R"))
 
